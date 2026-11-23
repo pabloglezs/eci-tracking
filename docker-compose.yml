@@ -1,0 +1,33 @@
+services:
+  app:
+    build: .
+    image: eci-tracking:latest
+    container_name: eci-tracking
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      TZ: ${TZ:-Europe/Madrid}
+      PORT: 3000
+      # URL pública de la app (se usa en los enlaces de los emails).
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      # Comprobación diaria de precios (cron, en la zona horaria TZ).
+      CHECK_CRON: ${CHECK_CRON:-0 7 * * *}
+      CHECK_ON_START: ${CHECK_ON_START:-false}
+      # Pon true si hay un reverse proxy delante (para el rate limit por IP).
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      # Token para lanzar POST /api/admin/check a mano. Vacío = desactivado.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      # Email (alertas de bajada de precio)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-ECI Tracker <no-reply@localhost>}
+      MAIL_DRY_RUN: ${MAIL_DRY_RUN:-false}
+    volumes:
+      - eci-data:/data
+
+volumes:
+  eci-data:

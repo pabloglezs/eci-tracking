@@ -1,0 +1,99 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { openDb } from '../src/db.js';
+import { buildApp } from '../src/app.js';
+import { recordPrice, upsertProduct, addSubscription } from '../src/store.js';
+import { checkProduct } from '../src/checker.js';
+import { processQueue } from '../src/mailer.js';
+
+const TZ = 'Europe/Madrid';
+const day = (s) => new Date(`${s}T12:00:00Z`);
+const P = {
+  id: 'A111111111-2222222222',
+  url: 'https://www.elcorteingles.es/electronica/A111111111-2222222222-pr-x/',
+  name: 'Producto X',
+};
+
+test('recordPrice detecta bajada respecto al día anterior y no duplica avisos', () => {
+  const db = openDb(':memory:');
+  upsertProduct(db, P);
+  assert.equal(recordPrice(db, P.id, 100, TZ, day('2026-03-01')).dropped, false); // primer precio
+  assert.equal(recordPrice(db, P.id, 100, TZ, day('2026-03-02')).dropped, false); // igual
+  assert.equal(recordPrice(db, P.id, 90, TZ, day('2026-03-03')).dropped, true); // baja
+  assert.equal(recordPrice(db, P.id, 90, TZ, day('2026-03-03')).dropped, false); // recomprobación mismo día
+  assert.equal(recordPrice(db, P.id, 95, TZ, day('2026-03-04')).dropped, false); // sube
+});
+
+test('bajada de precio => cola de emails => envío a todos los suscriptores', async () => {
+  const db = openDb(':memory:');
+  const { product } = upsertProduct(db, P);
+  addSubscription(db, P.id, 'a@x.com', 'tok-a-0123456789abcdef');
+  addSubscription(db, P.id, 'b@x.com', 'tok-b-0123456789abcdef');
+  recordPrice(db, P.id, 100, TZ, new Date(Date.now() - 864e5 * 2)); // antes de hoy
+
+  const r = await checkProduct(db, product, { scrape: async () => ({ price: 80 }), tz: TZ });
+  assert.equal(r.ok, true);
+  assert.equal(r.dropped, true);
+
+  const queued = db.prepare('SELECT * FROM email_queue').all();
+  assert.equal(queued.length, 2);
+  assert.match(queued[0].subject, /80,00/);
+
+  const sentTo = [];
+  const res = await processQueue(db, { send: async (m) => sentTo.push(m.to_email), delayMs: 0 });
+  assert.equal(res.sent, 2);
+  assert.deepEqual(sentTo.sort(), ['a@x.com', 'b@x.com']);
+  assert.equal(db.prepare(`SELECT COUNT(*) n FROM email_queue WHERE status='sent'`).get().n, 2);
+});
+
+test('un fallo de envío reintenta y acaba en failed', async () => {
+  const db = openDb(':memory:');
+  upsertProduct(db, P);
+  addSubscription(db, P.id, 'a@x.com', 'tok-a-0123456789abcdef');
+  db.prepare(`INSERT INTO email_queue (to_email, subject, text, html, created_at) VALUES ('a@x.com','s','t','h','now')`).run();
+  for (let i = 0; i < 5; i++) await processQueue(db, { send: async () => { throw new Error('smtp down'); }, delayMs: 0 });
+  const m = db.prepare('SELECT status, attempts, error FROM email_queue').get();
+  assert.equal(m.status, 'failed');
+  assert.equal(m.attempts, 5);
+});
+
+test('API: alta, consulta, suscripción y baja', async () => {
+  const db = openDb(':memory:');
+  const app = await buildApp({ db, serveStatic: false });
+
+  const bad = await app.inject({ method: 'POST', url: '/api/products', payload: { url: 'https://example.com/A12345678-x/' } });
+  assert.equal(bad.statusCode, 400);
+
+  const add = await app.inject({
+    method: 'POST',
+    url: '/api/products',
+    payload: { url: P.url + '?utm=1', name: P.name, price: 120, image: 'https://evil.com/x.jpg' },
+  });
+  assert.equal(add.statusCode, 201);
+  assert.equal(add.json().product.id, P.id);
+
+  const again = await app.inject({ method: 'POST', url: '/api/products', payload: { url: P.url } });
+  assert.equal(again.statusCode, 200);
+  assert.equal(again.json().created, false);
+
+  const detail = (await app.inject({ url: `/api/products/${P.id}` })).json();
+  assert.equal(detail.stats.current, 120);
+  assert.equal(detail.product.image, null); // imagen de dominio ajeno descartada
+  assert.equal(detail.history.length, 1);
+
+  assert.equal((await app.inject({ url: '/api/products/NOPE' })).statusCode, 404);
+  assert.equal((await app.inject({ url: '/api/products?deals=1' })).json().products.length, 0);
+  assert.equal((await app.inject({ url: '/api/products?q=producto' })).json().products.length, 1);
+  assert.equal((await app.inject({ url: '/api/products?q=%25' })).json().products.length, 0); // % no es comodín
+
+  const badMail = await app.inject({ method: 'POST', url: `/api/products/${P.id}/subscribe`, payload: { email: 'nope' } });
+  assert.equal(badMail.statusCode, 400);
+  const sub = await app.inject({ method: 'POST', url: `/api/products/${P.id}/subscribe`, payload: { email: 'A@X.com' } });
+  assert.equal(sub.json().created, true);
+  assert.equal((await app.inject({ method: 'POST', url: `/api/products/${P.id}/subscribe`, payload: { email: 'a@x.com' } })).json().created, false);
+
+  const { token } = db.prepare('SELECT token FROM subscriptions').get();
+  assert.equal((await app.inject({ url: `/api/unsubscribe?token=${token}` })).statusCode, 200);
+  assert.equal((await app.inject({ url: `/api/unsubscribe?token=${token}` })).statusCode, 404);
+  await app.close();
+});

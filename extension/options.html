@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>ECI Tracker · Opciones</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; max-width: 520px; margin: 40px auto; padding: 0 16px; }
+    input { width: 100%; padding: 8px 10px; font: inherit; box-sizing: border-box; }
+    button { margin-top: 12px; padding: 8px 16px; font: inherit; cursor: pointer; }
+    .hint { color: #666; font-size: 13px; }
+    #status { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>ECI Tracker</h1>
+  <label for="api"><b>URL de tu servidor ECI Tracker</b></label>
+  <input id="api" type="url" placeholder="http://localhost:3000" required>
+  <p class="hint">Es la dirección donde has desplegado la app (sin barra final). Ejemplo: https://eci.midominio.com</p>
+  <button id="save">Guardar</button>
+  <div id="status" role="status"></div>
+  <script src="options.js"></script>
+</body>
+</html>
