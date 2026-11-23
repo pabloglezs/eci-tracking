@@ -179,7 +179,7 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
     const parsed = parseProductUrl(body.url);
     if (!parsed) return reply.code(400).send({ error: 'La URL no es un producto de El Corte Inglés' });
 
-    if (!getProduct(db, parsed.id) && trackNew.get(ip) >= config.trackNewPerDay) {
+    if (config.trackNewPerDay > 0 && !getProduct(db, parsed.id) && trackNew.get(ip) >= config.trackNewPerDay) {
       return reply.code(429).send({ error: 'Has superado el límite diario de productos nuevos' });
     }
     const { product, created } = upsertProduct(db, {

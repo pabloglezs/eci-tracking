@@ -72,15 +72,27 @@ test('POST /api/products: tope diario de peticiones y de productos nuevos por IP
   );
 });
 
+const NEW_URL = (i) => `https://www.elcorteingles.es/electronica/A${300000 + i}-pr-x/`;
+
 test('tope de productos nuevos: bloquea con 429 antes de crear', async () => {
   await withApp(
     async (app, db) => {
-      // trackNewPerDay=0 => cualquier producto nuevo se rechaza
-      const r = await post(app, { url: URL1 });
+      assert.equal((await post(app, { url: NEW_URL(1) })).statusCode, 201); // 1.º nuevo: cabe
+      const r = await post(app, { url: NEW_URL(2) }); // 2.º nuevo: supera el tope (1)
       assert.equal(r.statusCode, 429);
-      assert.equal(db.prepare('SELECT COUNT(*) c FROM products').get().c, 0);
+      assert.equal(db.prepare('SELECT COUNT(*) c FROM products').get().c, 1);
     },
-    { trackNewPerDay: 0, trackPerDay: 10 },
+    { trackNewPerDay: 1, trackPerDay: 10 },
+  );
+});
+
+test('trackNewPerDay = 0 significa sin límite de productos nuevos', async () => {
+  await withApp(
+    async (app, db) => {
+      for (const i of [1, 2, 3, 4, 5]) assert.equal((await post(app, { url: NEW_URL(i) })).statusCode, 201);
+      assert.equal(db.prepare('SELECT COUNT(*) c FROM products').get().c, 5);
+    },
+    { trackNewPerDay: 0, trackPerDay: 100 },
   );
 });
 

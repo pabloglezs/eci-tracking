@@ -34,7 +34,8 @@ services:
       # Límites por IP de POST /api/products (por minuto, por día y productos nuevos por día).
       TRACK_PER_MINUTE: ${TRACK_PER_MINUTE:-30}
       TRACK_PER_DAY: ${TRACK_PER_DAY:-200}
-      TRACK_NEW_PER_DAY: ${TRACK_NEW_PER_DAY:-30}
+      # Productos nuevos por IP y día (0 = sin límite).
+      TRACK_NEW_PER_DAY: ${TRACK_NEW_PER_DAY:-0}
       SUBSCRIBE_PER_MINUTE: ${SUBSCRIBE_PER_MINUTE:-10}
       # Scraper: pausa entre peticiones a ECI, reintentos y descatalogados.
       REQUEST_DELAY_MIN_MS: ${REQUEST_DELAY_MIN_MS:-2000}

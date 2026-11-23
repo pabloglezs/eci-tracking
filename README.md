@@ -113,7 +113,7 @@ Cada noche (`BACKUP_CRON`) se hace una copia consistente de la base con `VACUUM 
 | `BACKUP_DIR` / `BACKUP_KEEP` | `/data/backups` / `7` | Carpeta y nº de copias a conservar |
 | `BACKUP_PATH` | volumen `eci-backups` | Ruta del host para los backups (bind mount) |
 | `TRACK_PER_MINUTE` / `TRACK_PER_DAY` | `30` / `200` | Límites por IP de `POST /api/products` |
-| `TRACK_NEW_PER_DAY` | `30` | Productos nuevos por IP y día |
+| `TRACK_NEW_PER_DAY` | `0` | Productos nuevos por IP y día (`0` = sin límite; ponlo si abres el servicio a más gente) |
 | `SUBSCRIBE_PER_MINUTE` | `10` | Límite por IP de las suscripciones |
 
 ## API

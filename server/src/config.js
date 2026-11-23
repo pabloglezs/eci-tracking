@@ -33,7 +33,8 @@ export const config = {
   // Endurecimiento de POST /api/products (por IP).
   trackPerMinute: Number(env.TRACK_PER_MINUTE) || 30,
   trackPerDay: Number(env.TRACK_PER_DAY) || 200,
-  trackNewPerDay: Number(env.TRACK_NEW_PER_DAY) || 30,
+  // Productos NUEVOS por IP y día. 0 (por defecto) = sin límite.
+  trackNewPerDay: Number(env.TRACK_NEW_PER_DAY) || 0,
   // Límite por minuto de las rutas de suscripción.
   subscribePerMinute: Number(env.SUBSCRIBE_PER_MINUTE) || 10,
   mailDelayMs: Number(env.MAIL_DELAY_MS) || 1000,
