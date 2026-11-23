@@ -12,10 +12,10 @@
 - [x] Tests (unitarios, flujo de alertas, API, listado, scraper)
 
 ## Antes de publicarlo de verdad
-- [ ] **Desplegar en Portainer esta versión** y comprobar: categorías, marketplace, doble opt-in y backups (copia antes `/data/eci.db`: las migraciones añaden columnas y tablas)
+- [x] Desplegada en Portainer (API nueva, categorías y marketplace comprobados). Falta ver el **primer backup nocturno** (03:30) en el volumen `eci-backups`
 - [ ] Configurar SMTP real y probar un envío (dominio con SPF/DKIM para no caer en spam); comprobar que llegan las cabeceras `List-Unsubscribe`
 - [ ] Activar *Always Use HTTPS* en Cloudflare (que `http://` redirija a HTTPS)
-- [ ] Ejecutar el workflow de CI en GitHub y comprobar que pasa
+- [x] CI en GitHub Actions: pasa en los pushes a `main`
 - [ ] Publicar la extensión (Chrome Web Store / Firefox Add-ons) o distribuir el zip
 - [ ] Si el repositorio va a ser público: revisar los aspectos legales (condiciones de uso de ECI, uso de su marca en el nombre del proyecto, RGPD/LOPDGDD de los emails), página de privacidad y aviso de no afiliación
 
