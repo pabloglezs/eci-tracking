@@ -1,44 +1,36 @@
 # TODO
 
-## Hecho (v0.1)
-- [x] Estructura del repo, Dockerfile y docker-compose
-- [x] Backend: SQLite, API REST, scraper JSON-LD, comprobación diaria (cron), cola de emails
-- [x] Web: home con ofertas + listado, ficha con gráfico (actual / mín / máx / medio) y suscripción
-- [x] Extensión Chrome MV3: botón «Seguir precio» y opciones
-- [x] Tests (lógica de precios, scraper, flujo bajada→cola→envío, API)
+## Hecho
+- [x] Estructura del repo, Dockerfile y docker-compose; build y arranque probados en local
+- [x] Backend: SQLite, API REST, scraper JSON-LD (catálogo y marketplace), comprobación diaria (cron), cola de emails
+- [x] Web: portada con bloque de ofertas, listado paginado con orden, buscador, categorías, sparkline y alta por URL; ficha con gráfico (actual / mín / máx / medio) y suscripción
+- [x] Extensión (Chrome y Firefox): botón en ficha, popup con el estado del producto, mini botón 📉/✓ en listados, búsquedas y favoritos, iconos y empaquetado
+- [x] Alertas: doble opt-in (confirmación por POST), precio objetivo, «darme de baja de todo», baja en un clic, tope de confirmaciones por email, purga de la cola
+- [x] Scraper: reintentos con backoff, descatalogados, sin stock, precio tachado, aviso al admin y métricas (`/api/admin/stats`)
+- [x] Seguridad: validación y límites por IP de la API pública, cabeceras (CSP estricta), `CF-Connecting-IP` detrás del túnel
+- [x] Mantenimiento: backups automáticos de SQLite (con restauración probada) y CI en GitHub Actions
+- [x] Tests (unitarios, flujo de alertas, API, listado, scraper)
 
 ## Antes de publicarlo de verdad
-- [ ] **Probar el build de Docker** y un despliegue completo en Portainer (no probado aún)
-- [ ] **Doble opt-in** de email: ahora cualquiera puede apuntar el email de otra persona (mitigado con enlace de baja + rate limit)
-- [ ] Reverse proxy con HTTPS y probar la extensión contra la URL pública
-- [ ] Configurar SMTP real y probar un envío (dominio con SPF/DKIM para no caer en spam)
-- [ ] Iconos de la extensión (16/48/128) y publicarla en Chrome Web Store (o distribuir el zip)
+- [ ] **Desplegar en Portainer esta versión** y comprobar: categorías, marketplace, doble opt-in y backups (copia antes `/data/eci.db`: las migraciones añaden columnas y tablas)
+- [ ] Configurar SMTP real y probar un envío (dominio con SPF/DKIM para no caer en spam); comprobar que llegan las cabeceras `List-Unsubscribe`
+- [ ] Activar *Always Use HTTPS* en Cloudflare (que `http://` redirija a HTTPS)
+- [ ] Ejecutar el workflow de CI en GitHub y comprobar que pasa
+- [ ] Publicar la extensión (Chrome Web Store / Firefox Add-ons) o distribuir el zip
+- [ ] Si el repositorio va a ser público: revisar los aspectos legales (condiciones de uso de ECI, uso de su marca en el nombre del proyecto, RGPD/LOPDGDD de los emails), página de privacidad y aviso de no afiliación
 
-## Robustez del scraper
-- [ ] Alertar si muchos productos fallan seguidos (ECI cambió algo / nos bloquea) — email al admin
-- [ ] Reintento con backoff y fallback a Playwright (navegador headless) si fetch recibe 403
-- [ ] Marcar productos descatalogados (404/410 repetidos) y dejar de consultarlos
-- [ ] Capturar precio tachado / «precio anterior» de ECI y mostrarlo
-- [ ] Detectar «sin stock» (`availability`) y no registrar precio erróneo
-- [ ] Proxy/rotación de IP si hace falta con muchos productos
+## Pendientes de producto
+- [ ] Mostrar `originalPrice` (precio tachado) y `inStock` en la web: el servidor ya los devuelve
+- [ ] Filtro «en su mínimo histórico»
+- [ ] Mostrar en la ficha si el producto está descatalogado (`status = gone`)
+- [ ] Resumen semanal por email (opcional, aplazado)
+- [ ] Captcha ligero en las altas si hay abuso
 
-## Producto
-- [ ] Alerta por **precio objetivo** («avísame si baja de X €») además de «baja respecto a ayer»
-- [ ] Sparkline en las tarjetas de la home
-- [x] Categorías (del breadcrumb de ECI): chips, subcategorías y agrupación en la portada
-- [ ] Ordenar el listado (mayor bajada, mínimo histórico)
-- [ ] Paginación (el listado carga todo; hay que paginar y optimizar la query cuando haya miles de productos)
-- [ ] Añadir producto pegando la URL desde la web (sin extensión)
-- [x] Popup en el icono de la extensión (seguir producto de la pestaña activa)
-- [x] Mini botón 📉/✓ en las tarjetas de listados y búsquedas de ECI
-- [ ] Mostrar en el popup el estado de un producto ya seguido (precio actual y mínimo)
-- [ ] Gestión de suscripciones: «darme de baja de todo» por email
-- [ ] Resumen semanal por email (opcional)
-- [ ] Versión Firefox de la extensión
-
-## Seguridad / mantenimiento
-- [ ] Validar mejor lo que envía la extensión (cualquiera puede llamar a la API): límites por IP más finos, captcha ligero si hay abuso
-- [ ] Purga de emails enviados antiguos (`email_queue`)
-- [ ] Backups automáticos de la BD
-- [ ] CI en GitHub Actions: `npm test` + build de la imagen en cada PR
-- [ ] Logs/métricas de la comprobación diaria (cuántos ok / error)
+## Robustez / decisiones aplazadas
+- [ ] **Playwright** (navegador headless) como fallback si ECI empieza a bloquear el `fetch` (403 con cabeceras de navegador): decidir solo si ocurre
+- [ ] **Proxy / rotación de IP** si hace falta con muchos productos (aplazado)
+- [ ] Los contadores diarios de la API (límite por IP y día) están en memoria y se reinician con el contenedor; si hace falta, persistirlos
+- [ ] Índice cubriente en `prices` para acelerar el listado con decenas de miles de productos (medido: ~230 ms con 5000 productos × 90 días)
+- [ ] Probar el comportamiento ante un 429 real de ECI (el backoff solo está probado con tests)
+- [ ] Criterio de variantes de color de marketplace (la extensión asume que comparten prefijo de SKU; no verificado)
+- [ ] Probar el flujo completo con la extensión cargada contra el servidor desplegado (alta de un producto de marketplace desde favoritos)

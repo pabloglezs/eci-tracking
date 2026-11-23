@@ -35,6 +35,23 @@ services:
       TRACK_PER_MINUTE: ${TRACK_PER_MINUTE:-30}
       TRACK_PER_DAY: ${TRACK_PER_DAY:-200}
       TRACK_NEW_PER_DAY: ${TRACK_NEW_PER_DAY:-30}
+      SUBSCRIBE_PER_MINUTE: ${SUBSCRIBE_PER_MINUTE:-10}
+      # Scraper: pausa entre peticiones a ECI, reintentos y descatalogados.
+      REQUEST_DELAY_MIN_MS: ${REQUEST_DELAY_MIN_MS:-2000}
+      REQUEST_DELAY_MAX_MS: ${REQUEST_DELAY_MAX_MS:-6000}
+      SCRAPE_RETRIES: ${SCRAPE_RETRIES:-2}
+      SCRAPE_BACKOFF_MS: ${SCRAPE_BACKOFF_MS:-3000}
+      GONE_AFTER: ${GONE_AFTER:-3}
+      GONE_RECHECK_DAYS: ${GONE_RECHECK_DAYS:-7}
+      # Aviso al admin si una pasada diaria falla en bloque (vacío = desactivado).
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_ALERT_FAIL_PCT: ${ADMIN_ALERT_FAIL_PCT:-50}
+      ADMIN_ALERT_MIN_SAMPLE: ${ADMIN_ALERT_MIN_SAMPLE:-3}
+      # Alertas por email: caducidad de confirmaciones, tope por dirección y purga de la cola.
+      CONFIRM_TTL_DAYS: ${CONFIRM_TTL_DAYS:-7}
+      CONFIRM_MAX_PER_EMAIL_DAY: ${CONFIRM_MAX_PER_EMAIL_DAY:-5}
+      QUEUE_SENT_RETENTION_DAYS: ${QUEUE_SENT_RETENTION_DAYS:-30}
+      QUEUE_FAILED_RETENTION_DAYS: ${QUEUE_FAILED_RETENTION_DAYS:-60}
     volumes:
       - eci-data:/data
       # Volumen aparte para los backups: si se pierde/corrompe eci-data siguen ahí.
