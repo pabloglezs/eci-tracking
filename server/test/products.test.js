@@ -2,6 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseProductUrl, computeStats, dealInfo } from '../src/products.js';
 import { parseProductHtml } from '../src/scraper.js';
+import { clientIp } from '../src/app.js';
+
+test('clientIp usa CF-Connecting-IP sólo con proxy de confianza', () => {
+  const req = { ip: '172.17.0.2', headers: { 'cf-connecting-ip': '88.1.2.3' } };
+  assert.equal(clientIp(req, true), '88.1.2.3');
+  assert.equal(clientIp(req, false), '172.17.0.2');
+  assert.equal(clientIp({ ip: '1.1.1.1', headers: {} }, true), '1.1.1.1');
+});
 
 test('parseProductUrl extrae id y limpia query', () => {
   const r = parseProductUrl(

@@ -71,7 +71,8 @@ Pon un reverse proxy con HTTPS delante (Nginx Proxy Manager, Traefik, Caddy…) 
 | `CHECK_CRON` | `0 7 * * *` | Cuándo se comprueban los precios |
 | `CHECK_ON_START` | `false` | Comprobar al arrancar |
 | `REQUEST_DELAY_MIN_MS` / `MAX` | `2000` / `6000` | Pausa aleatoria entre peticiones a ECI |
-| `TRUST_PROXY` | `false` | `true` detrás de reverse proxy |
+| `BIND_ADDR` | `0.0.0.0` | Interfaz del host donde se publica el puerto (`172.17.0.1` si entra un túnel de Cloudflare por esa IP) |
+| `TRUST_PROXY` | `false` | `true` detrás de proxy/túnel; el rate limit usa entonces `CF-Connecting-IP` |
 | `ADMIN_TOKEN` | vacío | Habilita `POST /api/admin/check` |
 | `SMTP_HOST/PORT/SECURE/USER/PASS` | — | Servidor SMTP. Sin él, los emails quedan en cola |
 | `MAIL_FROM` | `ECI Tracker <no-reply@localhost>` | Remitente |

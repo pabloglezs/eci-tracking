@@ -5,7 +5,9 @@ services:
     container_name: eci-tracking
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      # BIND_ADDR limita desde dónde se puede entrar. Con un túnel de Cloudflare
+      # que apunta a 172.17.0.1, pon BIND_ADDR=172.17.0.1 para no exponerlo a la LAN.
+      - "${BIND_ADDR:-0.0.0.0}:${PORT:-3000}:3000"
     environment:
       TZ: ${TZ:-Europe/Madrid}
       PORT: 3000

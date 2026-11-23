@@ -34,6 +34,16 @@ const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(here, '..', 'public');
 const CHART_DIR = join(here, '..', 'node_modules', 'chart.js', 'dist');
 
+/**
+ * IP del cliente para el rate limit. Detrás de Cloudflare, la IP real llega en
+ * CF-Connecting-IP (que el cliente no puede falsear si la app sólo es accesible
+ * por el túnel). Sin proxy de confianza se usa la IP de la conexión.
+ */
+export function clientIp(req, trustProxy = config.trustProxy) {
+  const cf = req.headers['cf-connecting-ip'];
+  return (trustProxy && typeof cf === 'string' && cf.trim()) || req.ip;
+}
+
 const limit = (max) => ({ config: { rateLimit: { max, timeWindow: '1 minute' } } });
 
 export async function buildApp({ db, logger = false, serveStatic = true }) {
@@ -41,7 +51,7 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
 
   // CORS abierto: la extensión de Chrome llama a la API desde otro origen.
   await app.register(cors, { origin: true });
-  await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
+  await app.register(rateLimit, { max: 300, timeWindow: '1 minute', keyGenerator: (req) => clientIp(req) });
 
   app.get('/api/health', async () => ({ ok: true }));
 
