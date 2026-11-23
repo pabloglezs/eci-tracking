@@ -6,6 +6,7 @@ import { recordPrice, upsertProduct, addSubscription } from '../src/store.js';
 import { checkProduct } from '../src/checker.js';
 import { processQueue } from '../src/mailer.js';
 
+const post = (app, url, token) => app.inject({ method: 'POST', url, headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload: `token=${token}` });
 const TZ = 'Europe/Madrid';
 const day = (s) => new Date(`${s}T12:00:00Z`);
 const P = {
@@ -121,7 +122,7 @@ test('API: alta, consulta, suscripción y baja', async () => {
   assert.deepEqual(sub.json(), sub2.json()); // misma respuesta exista o no la suscripción
   const { token, confirmed_at } = db.prepare('SELECT token, confirmed_at FROM subscriptions').get();
   assert.equal(confirmed_at, null); // pendiente hasta confirmar
-  assert.equal((await app.inject({ url: `/api/unsubscribe?token=${token}` })).statusCode, 200);
-  assert.equal((await app.inject({ url: `/api/unsubscribe?token=${token}` })).statusCode, 404);
+  assert.equal((await post(app, '/api/unsubscribe', token)).statusCode, 200);
+  assert.equal((await post(app, '/api/unsubscribe', token)).statusCode, 404);
   await app.close();
 });

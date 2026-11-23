@@ -170,7 +170,9 @@ async function defaultSend(msg) {
     subject: msg.subject,
     text: msg.text,
     html: msg.html,
-    headers: msg.unsub_url ? { 'List-Unsubscribe': `<${msg.unsub_url}>` } : undefined,
+    headers: msg.unsub_url
+      ? { 'List-Unsubscribe': `<${msg.unsub_url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+      : undefined,
   });
 }
 

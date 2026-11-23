@@ -12,6 +12,7 @@ import { purgeEmailQueue } from '../src/mailer.js';
 
 const P = { id: 'A111111111-2222222222', url: 'https://www.elcorteingles.es/electronica/A111111111-2222222222-pr-x/', name: 'Producto X' };
 const sub = (app, payload) => app.inject({ method: 'POST', url: `/api/products/${P.id}/subscribe`, payload });
+const post = (app, url, token) => app.inject({ method: 'POST', url, headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload: `token=${token}` });
 const mails = (db) => db.prepare('SELECT * FROM email_queue ORDER BY id').all();
 const tokenOf = (text, name) => text.match(new RegExp(`/api/${name}\\?token=([0-9a-f]+)`))[1];
 
@@ -42,9 +43,9 @@ test('doble opt-in: pendiente no recibe avisos; confirmar activa; baja global', 
   assert.equal(mails(db).length, 1, 'pendiente: sin aviso de bajada');
 
   const ct = tokenOf(conf.text, 'confirm');
-  assert.equal((await app.inject({ url: '/api/confirm?token=zzzz' })).statusCode, 404);
-  assert.equal((await app.inject({ url: `/api/confirm?token=${ct}` })).statusCode, 200);
-  assert.match((await app.inject({ url: `/api/confirm?token=${ct}` })).body, /ya estaba/);
+  assert.equal((await post(app, '/api/confirm', 'zzzz')).statusCode, 404);
+  assert.equal((await post(app, '/api/confirm', ct)).statusCode, 200);
+  assert.match((await post(app, '/api/confirm', ct)).body, /ya estaba/);
   assert.equal(countSubscribers(db, P.id), 1);
   const welcome = mails(db).at(-1);
   assert.match(welcome.subject, /activadas/);
@@ -56,8 +57,8 @@ test('doble opt-in: pendiente no recibe avisos; confirmar activa; baja global', 
 
   const all = tokenOf(alert.text, 'unsubscribe-all');
   assert.equal(all.length, 48);
-  assert.equal((await app.inject({ url: '/api/unsubscribe-all?token=nope' })).statusCode, 404);
-  assert.equal((await app.inject({ url: `/api/unsubscribe-all?token=${all}` })).statusCode, 200);
+  assert.equal((await post(app, '/api/unsubscribe-all', 'nope')).statusCode, 404);
+  assert.equal((await post(app, '/api/unsubscribe-all', all)).statusCode, 200);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM subscriptions').get().n, 0);
   await app.close();
 });
@@ -105,7 +106,7 @@ test('las pendientes caducan y se purgan; las confirmadas no', async () => {
   addSubscription(db, P.id, 'old@x.com', 'tok-o-0123456789abcdef', { now: old });
   addSubscription(db, P.id, 'conf@x.com', 'tok-c-0123456789abcdef', { confirmed: true, now: old });
   const ct = db.prepare("SELECT confirm_token t FROM subscriptions WHERE email='old@x.com'").get().t;
-  assert.equal((await app.inject({ url: `/api/confirm?token=${ct}` })).statusCode, 410);
+  assert.equal((await post(app, '/api/confirm', ct)).statusCode, 410);
   addSubscription(db, P.id, 'old2@x.com', 'tok-p-0123456789abcdef', { now: old });
   assert.equal(purgePendingSubscriptions(db, 7), 1);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM subscriptions').get().n, 1);
@@ -139,4 +140,41 @@ test('purga de email_queue: enviados >30d y fallidos >60d', () => {
   ins.run('e', 's', 't', 'h', 'pending', ago(90), null);
   assert.deepEqual(purgeEmailQueue(db), { sent: 1, failed: 1 });
   assert.deepEqual(db.prepare('SELECT to_email FROM email_queue ORDER BY id').all().map((r) => r.to_email), ['b', 'd', 'e']);
+});
+
+test('GET de confirmar/baja sólo muestra una página; el POST cambia el estado', async () => {
+  const { db, app } = await setup();
+  await sub(app, { email: 'a@x.com' });
+  const ct = tokenOf(mails(db)[0].text, 'confirm');
+  const g = await app.inject({ url: `/api/confirm?token=${ct}` });
+  assert.equal(g.statusCode, 200);
+  assert.match(g.body, /<form method="post" action="\/api\/confirm">/);
+  assert.match(g.body, new RegExp(`name="token" value="${ct}"`));
+  assert.equal(db.prepare('SELECT confirmed_at c FROM subscriptions').get().c, null); // GET no confirma
+  assert.equal(countSubscribers(db, P.id), 0);
+  assert.equal((await post(app, '/api/confirm', ct)).statusCode, 200);
+  assert.equal(countSubscribers(db, P.id), 1);
+  // JSON también vale
+  const { token, } = db.prepare('SELECT token FROM subscriptions').get();
+  const uall = db.prepare('SELECT token FROM email_tokens').get().token;
+
+  // GET de bajas: no cambia nada
+  assert.equal((await app.inject({ url: `/api/unsubscribe?token=${token}` })).statusCode, 200);
+  assert.equal((await app.inject({ url: `/api/unsubscribe-all?token=${uall}` })).statusCode, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM subscriptions').get().n, 1);
+
+  // One-click RFC 8058: POST a la URL de la cabecera, cuerpo List-Unsubscribe=One-Click
+  const oc = await app.inject({
+    method: 'POST', url: `/api/unsubscribe?token=${token}`,
+    headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload: 'List-Unsubscribe=One-Click',
+  });
+  assert.equal(oc.statusCode, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM subscriptions').get().n, 0);
+  assert.equal((await post(app, '/api/unsubscribe', token)).statusCode, 404);
+  // baja global con JSON
+  addSubscription(db, P.id, 'a@x.com', 'tok-z-0123456789abcdef', { confirmed: true });
+  const j = await app.inject({ method: 'POST', url: '/api/unsubscribe-all', payload: { token: uall } });
+  assert.equal(j.statusCode, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM subscriptions').get().n, 0);
+  await app.close();
 });
