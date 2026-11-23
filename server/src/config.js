@@ -27,4 +27,8 @@ export const config = {
   // Sin SMTP, los emails se quedan en cola; con MAIL_DRY_RUN se escriben en el log.
   mailDryRun: bool(env.MAIL_DRY_RUN),
   mailDelayMs: Number(env.MAIL_DELAY_MS) || 1000,
+  // Alertas: caducidad de suscripciones sin confirmar y purga de email_queue.
+  confirmTtlDays: Number(env.CONFIRM_TTL_DAYS) || 7,
+  queueSentRetentionDays: Number(env.QUEUE_SENT_RETENTION_DAYS) || 30,
+  queueFailedRetentionDays: Number(env.QUEUE_FAILED_RETENTION_DAYS) || 60,
 };

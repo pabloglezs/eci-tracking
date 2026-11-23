@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { today } from './db.js';
 import { computeStats, dealInfo } from './products.js';
 
@@ -92,18 +93,54 @@ export function listProducts(db, { q = '', dealsOnly = false, tz }) {
 
 const escapeLike = (s) => s.replace(/[\\%_]/g, (c) => '\\' + c);
 
-export function addSubscription(db, productId, email, token) {
-  const existing = db
-    .prepare('SELECT token FROM subscriptions WHERE product_id = ? AND email = ?')
+const RESEND_CONFIRM_MS = 10 * 60 * 1000;
+const DAY_MS = 864e5;
+
+/**
+ * Crea una suscripción PENDIENTE de confirmar (o confirmada si `confirmed`).
+ * Si ya existía no se toca nada visible: `sendConfirmation` indica si hay que
+ * (re)enviar el email de confirmación (como mucho cada 10 min por pendiente).
+ */
+export function addSubscription(db, productId, email, token, { targetPrice = null, confirmed = false, now = new Date() } = {}) {
+  const ex = db
+    .prepare('SELECT token, confirm_token, confirmed_at, created_at FROM subscriptions WHERE product_id = ? AND email = ?')
     .get(productId, email);
-  if (existing) return { created: false, token: existing.token };
-  db.prepare('INSERT INTO subscriptions (product_id, email, token, created_at) VALUES (?, ?, ?, ?)').run(
-    productId,
-    email,
-    token,
-    new Date().toISOString(),
-  );
-  return { created: true, token };
+  if (ex) {
+    if (ex.confirmed_at) return { created: false, token: ex.token, confirmed: true, sendConfirmation: false };
+    const stale = now - Date.parse(ex.created_at) > RESEND_CONFIRM_MS;
+    if (stale) {
+      db.prepare('UPDATE subscriptions SET created_at = ?, target_price = ? WHERE product_id = ? AND email = ?').run(
+        now.toISOString(), targetPrice, productId, email,
+      );
+    }
+    return { created: false, token: ex.token, confirmToken: ex.confirm_token, confirmed: false, sendConfirmation: stale };
+  }
+  const confirmToken = randomBytes(24).toString('hex');
+  const iso = now.toISOString();
+  db.prepare(
+    'INSERT INTO subscriptions (product_id, email, token, created_at, confirmed_at, confirm_token, target_price) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(productId, email, token, iso, confirmed ? iso : null, confirmToken, targetPrice);
+  return { created: true, token, confirmToken, confirmed, sendConfirmation: !confirmed };
+}
+
+/** Confirma por token. status: ok | already | expired | invalid. */
+export function confirmSubscription(db, confirmToken, { ttlDays = 7, now = new Date() } = {}) {
+  if (typeof confirmToken !== 'string' || confirmToken.length < 16) return { status: 'invalid' };
+  const s = db.prepare('SELECT * FROM subscriptions WHERE confirm_token = ?').get(confirmToken);
+  if (!s) return { status: 'invalid' };
+  if (s.confirmed_at) return { status: 'already', sub: s };
+  if (now - Date.parse(s.created_at) > ttlDays * DAY_MS) {
+    db.prepare('DELETE FROM subscriptions WHERE id = ?').run(s.id);
+    return { status: 'expired' };
+  }
+  db.prepare('UPDATE subscriptions SET confirmed_at = ? WHERE id = ?').run(now.toISOString(), s.id);
+  return { status: 'ok', sub: { ...s, confirmed_at: now.toISOString() } };
+}
+
+/** Borra las suscripciones pendientes que superan la caducidad. */
+export function purgePendingSubscriptions(db, ttlDays = 7, now = new Date()) {
+  const cut = new Date(now - ttlDays * DAY_MS).toISOString();
+  return db.prepare('DELETE FROM subscriptions WHERE confirmed_at IS NULL AND created_at < ?').run(cut).changes;
 }
 
 export function removeSubscription(db, token) {
@@ -111,6 +148,23 @@ export function removeSubscription(db, token) {
   return r.changes > 0;
 }
 
+/** Token (estable, uno por email) para darse de baja de todas las suscripciones. */
+export function getUnsubAllToken(db, email) {
+  const ex = db.prepare('SELECT token FROM email_tokens WHERE email = ?').get(email);
+  if (ex) return ex.token;
+  const token = randomBytes(24).toString('hex');
+  db.prepare('INSERT INTO email_tokens (email, token) VALUES (?, ?)').run(email, token);
+  return token;
+}
+
+/** Da de baja todas las suscripciones del email dueño del token. null si el token no existe. */
+export function removeAllSubscriptions(db, token) {
+  const row = typeof token === 'string' && token.length >= 16 ? db.prepare('SELECT email FROM email_tokens WHERE token = ?').get(token) : null;
+  if (!row) return null;
+  return db.prepare('DELETE FROM subscriptions WHERE email = ?').run(row.email).changes;
+}
+
+/** Sólo cuenta las confirmadas. */
 export function countSubscribers(db, productId) {
-  return db.prepare('SELECT COUNT(*) AS n FROM subscriptions WHERE product_id = ?').get(productId).n;
+  return db.prepare('SELECT COUNT(*) AS n FROM subscriptions WHERE product_id = ? AND confirmed_at IS NOT NULL').get(productId).n;
 }

@@ -24,11 +24,13 @@ import {
   listProducts,
   addSubscription,
   removeSubscription,
+  confirmSubscription,
+  removeAllSubscriptions,
   countSubscribers,
 } from './store.js';
 import { today } from './db.js';
 import { checkSoon, runDailyCheck } from './checker.js';
-import { enqueueWelcome } from './mailer.js';
+import { enqueueWelcome, enqueueConfirmation } from './mailer.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(here, '..', 'public');
@@ -122,28 +124,59 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
     return { tracked: rows.map((r) => r.id) };
   });
 
+  // Doble opt-in: la suscripción queda pendiente hasta confirmar por email. La
+  // respuesta es idéntica exista ya la suscripción o no (no se filtra si un email
+  // ya estaba apuntado).
   app.post('/api/products/:id/subscribe', limit(10), async (req, reply) => {
     const product = getProduct(db, req.params.id);
     if (!product) return reply.code(404).send({ error: 'Producto no encontrado' });
     const email = String(req.body?.email ?? '').trim().toLowerCase();
     if (!isValidEmail(email)) return reply.code(400).send({ error: 'Email no válido' });
-    const sub = addSubscription(db, product.id, email, randomBytes(24).toString('hex'));
-    if (sub.created) {
-      const cur = getHistory(db, product.id).at(-1)?.price ?? null;
-      enqueueWelcome(db, product, email, sub.token, cur);
+    const rawTarget = req.body?.targetPrice;
+    let targetPrice = null;
+    if (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') {
+      const n = Number(String(rawTarget).replace(',', '.'));
+      if (!Number.isFinite(n) || n <= 0 || n >= 1e6) return reply.code(400).send({ error: 'Precio objetivo no válido' });
+      targetPrice = Math.round(n * 100) / 100;
     }
-    return { ok: true, created: sub.created };
+    const sub = addSubscription(db, product.id, email, randomBytes(24).toString('hex'), { targetPrice });
+    if (sub.sendConfirmation) enqueueConfirmation(db, product, email, sub.confirmToken, targetPrice);
+    return { ok: true, pending: true };
+  });
+
+  const page = (title, msg, code = 200) => (reply) => {
+    reply.type('text/html; charset=utf-8').code(code);
+    return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title><body style="font-family:system-ui;max-width:480px;margin:15vh auto;padding:0 16px">
+<h2>${title}</h2><p>${msg}</p><p><a href="/">Volver a ECI Tracker</a></p></body>`;
+  };
+
+  app.get('/api/confirm', limit(30), async (req, reply) => {
+    const r = confirmSubscription(db, String(req.query.token ?? ''), { ttlDays: config.confirmTtlDays });
+    if (r.status === 'ok') {
+      const product = getProduct(db, r.sub.product_id);
+      const cur = getHistory(db, r.sub.product_id).at(-1)?.price ?? null;
+      enqueueWelcome(db, product, r.sub.email, r.sub.token, cur, r.sub.target_price);
+      return page('¡Alerta confirmada!', 'Te avisaremos por email cuando haya novedades de precio.')(reply);
+    }
+    if (r.status === 'already') return page('Alerta ya confirmada', 'Esta alerta ya estaba activa.')(reply);
+    if (r.status === 'expired') return page('Enlace caducado', 'Vuelve a apuntarte desde la ficha del producto.', 410)(reply);
+    return page('Enlace no válido', 'Puede que haya caducado o que ya lo hubieras usado.', 404)(reply);
   });
 
   app.get('/api/unsubscribe', async (req, reply) => {
     const token = String(req.query.token ?? '');
     const removed = token.length >= 16 && removeSubscription(db, token);
-    reply.type('text/html; charset=utf-8').code(removed ? 200 : 404);
-    return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Baja de alertas</title><body style="font-family:system-ui;max-width:480px;margin:15vh auto;padding:0 16px">
-<h2>${removed ? 'Te has dado de baja' : 'Enlace no válido'}</h2>
-<p>${removed ? 'No recibirás más avisos de este producto.' : 'Puede que ya te hubieras dado de baja.'}</p>
-<p><a href="/">Volver a ECI Tracker</a></p></body>`;
+    return removed
+      ? page('Te has dado de baja', 'No recibirás más avisos de este producto.')(reply)
+      : page('Enlace no válido', 'Puede que ya te hubieras dado de baja.', 404)(reply);
+  });
+
+  app.get('/api/unsubscribe-all', limit(30), async (req, reply) => {
+    const n = removeAllSubscriptions(db, String(req.query.token ?? ''));
+    return n === null
+      ? page('Enlace no válido', 'El enlace no es correcto.', 404)(reply)
+      : page('Te has dado de baja de todo', `No recibirás más avisos (${n} suscripción(es) eliminadas).`)(reply);
   });
 
   // Lanzar la comprobación diaria a mano (sólo si hay ADMIN_TOKEN).

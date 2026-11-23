@@ -1,0 +1,3 @@
+/* Formulario de alertas de la ficha (precio objetivo, aviso de confirmación). */
+form.sub input.target { flex: 0 1 220px; min-width: 160px; }
+.alerts-hint { margin: 8px 0 0; font-size: 13px; }

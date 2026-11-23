@@ -58,6 +58,19 @@ export function openDb(path) {
   for (const c of ['category', 'subcategory', 'category_path']) {
     if (!cols.includes(c)) db.exec(`ALTER TABLE products ADD COLUMN ${c} TEXT`);
   }
+
+  // --- Migración (alertas): doble opt-in, precio objetivo y baja global ---
+  const subCols = db.prepare('PRAGMA table_info(subscriptions)').all().map((c) => c.name);
+  if (!subCols.includes('confirmed_at')) {
+    db.exec('ALTER TABLE subscriptions ADD COLUMN confirmed_at TEXT');
+    // Las suscripciones anteriores al doble opt-in pasan a confirmadas.
+    db.exec('UPDATE subscriptions SET confirmed_at = created_at');
+  }
+  for (const [c, def] of [['confirm_token', 'TEXT'], ['target_price', 'REAL'], ['alerted', 'INTEGER NOT NULL DEFAULT 0']]) {
+    if (!subCols.includes(c)) db.exec(`ALTER TABLE subscriptions ADD COLUMN ${c} ${def}`);
+  }
+  // Un token por email para «darme de baja de todo».
+  db.exec(`CREATE TABLE IF NOT EXISTS email_tokens (email TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE)`);
   return db;
 }
 
