@@ -207,3 +207,58 @@ test('GET /api/admin/stats exige ADMIN_TOKEN', async () => {
     config.adminToken = prev;
   }
 });
+
+// ---- Marketplace (MP_...) ----
+const mpHtml = (variants, extra = '') => `<html>${extra}<script type="application/ld+json">${JSON.stringify([
+  { '@type': 'BreadcrumbList', itemListElement: [{ position: 1, item: { name: 'Deportes' } }, { position: 2, item: { name: 'Ropa deportiva' } }] },
+  { '@type': 'ProductGroup', name: 'Sudadera The North Face - Negro', productGroupID: 'MP_0538405_NF0A8FXA', image: 'https://dam/x.jpg', hasVariant: variants },
+])}</script></html>`;
+const variant = (size, price, availability, strike) => ({
+  '@type': 'Product',
+  size,
+  offers: {
+    '@type': 'Offer',
+    availability: `https://schema.org/${availability}`,
+    price,
+    ...(strike && { priceSpecification: [{ priceType: 'https://schema.org/StrikethroughPrice', price: strike }] }),
+  },
+});
+
+test('parseProductUrl e ids: catálogo y marketplace', async () => {
+  const { parseProductUrl, PRODUCT_ID_RE } = await import('../src/products.js');
+  const u = 'https://www.elcorteingles.es/deportes/MP_0538405_NF0A8FXA-negro-pr-sudadera-the-north-face/?x=1';
+  assert.deepEqual(parseProductUrl(u), {
+    id: 'MP_0538405_NF0A8FXA',
+    url: 'https://www.elcorteingles.es/deportes/MP_0538405_NF0A8FXA-negro-pr-sudadera-the-north-face/',
+  });
+  assert.equal(parseProductUrl('https://www.elcorteingles.es/e/A202047813-8806097827146-pr-x/').id, 'A202047813-8806097827146');
+  for (const ok of ['A202047813-8806097827146', 'A12345678', 'MP_0538405_NF0A8FXA']) assert.ok(PRODUCT_ID_RE.test(ok), ok);
+  for (const bad of ['MP_0538405', 'MP_x_NF0', 'MP_0538405_NF0A8FXA-negro', 'xA12345678', "A123456'; --"]) assert.ok(!PRODUCT_ID_RE.test(bad), bad);
+  // /api/tracked acepta ids de marketplace
+  const db = openDb(':memory:');
+  upsertProduct(db, { id: 'MP_0538405_NF0A8FXA', url: u });
+  const app = await buildApp({ db, serveStatic: false });
+  const r = await app.inject({ url: '/api/tracked?ids=MP_0538405_NF0A8FXA,MP_1_ZZZ,basura' });
+  assert.deepEqual(r.json().tracked, ['MP_0538405_NF0A8FXA']);
+});
+
+test('marketplace: precio, tachado, stock y categorías desde el ProductGroup', () => {
+  const r = parseProductHtml(
+    mpHtml(
+      [variant('XS', 41.99, 'InStock', 69.99), variant('S', 41.99, 'InStock', 69.99)],
+      '<div>"price":1.5 "sale_price":9.9 <s>99,00 €</s></div>', // ruido de recomendados
+    ),
+  );
+  assert.deepEqual(
+    { ...r },
+    { name: 'Sudadera The North Face - Negro', image: 'https://dam/x.jpg', price: 41.99, inStock: true, originalPrice: 69.99, categories: ['Deportes', 'Ropa deportiva'] },
+  );
+});
+
+test('marketplace: tallas sin stock se ignoran; todas agotadas => inStock false; sin tachado', () => {
+  const some = parseProductHtml(mpHtml([variant('XS', 30, 'OutOfStock'), variant('L', 44.99, 'InStock')]));
+  assert.deepEqual([some.price, some.inStock, some.originalPrice], [44.99, true, null]);
+  const none = parseProductHtml(mpHtml([variant('XS', 44.99, 'OutOfStock'), variant('L', 44.99, 'OutOfStock')]));
+  assert.deepEqual([none.price, none.inStock], [44.99, false]);
+  assert.throws(() => parseProductHtml(mpHtml([{ '@type': 'Product', offers: {} }])), /No se encontró el precio/);
+});

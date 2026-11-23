@@ -14,6 +14,7 @@ import {
   sanitizeImage,
   sanitizeName,
   isValidPrice,
+  PRODUCT_ID_RE,
 } from './products.js';
 import {
   getProduct,
@@ -122,7 +123,7 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
   app.get('/api/tracked', limit(120), async (req) => {
     const ids = String(req.query.ids ?? '')
       .split(',')
-      .filter((s) => /^A\d{6,}(?:-\d{6,})?$/.test(s))
+      .filter((s) => PRODUCT_ID_RE.test(s))
       .slice(0, 100);
     if (!ids.length) return { tracked: [] };
     const rows = db.prepare(`SELECT id FROM products WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids);

@@ -43,6 +43,32 @@ function* walk(node) {
 }
 
 const isProduct = (n) => [].concat(n['@type'] ?? []).includes('Product');
+const isProductGroup = (n) => [].concat(n['@type'] ?? []).includes('ProductGroup');
+
+/**
+ * Productos de marketplace (MP_...): la ficha trae un ProductGroup JSON-LD con una
+ * variante por talla, cada una con su `offers`. Precio = el más bajo entre las tallas
+ * con stock (o entre todas si ninguna lo tiene); el tachado, el de esa misma variante.
+ * Sin ninguna variante con precio, devuelve null (no se adivina nada).
+ */
+function fromProductGroup(group) {
+  const variants = [].concat(group.hasVariant ?? [])
+    .map((v) => ({ v, price: offerPrice(v?.offers), stock: parseAvailability(v?.offers) }))
+    .filter((x) => x.price);
+  if (!variants.length) return null;
+  const inStock = variants.filter((x) => x.stock === true);
+  const pool = inStock.length ? inStock : variants;
+  const best = pool.reduce((a, b) => (b.price < a.price ? b : a));
+  const known = variants.some((x) => x.stock !== null);
+  const img = [].concat(group.image ?? best.v.image ?? [])[0];
+  return {
+    name: decode(group.name) || null,
+    image: typeof img === 'string' ? img : (img?.url ?? null),
+    price: best.price,
+    inStock: known ? inStock.length > 0 : null,
+    originalPrice: ((o) => (o && o > best.price ? o : null))(strikethroughPrice(best.v.offers)),
+  };
+}
 
 function offerPrice(offers) {
   for (const o of [].concat(offers ?? [])) {
@@ -112,6 +138,8 @@ export function parseProductHtml(html) {
           inStock: parseAvailability(node.offers),
           originalPrice: ((o) => (o && o > price ? o : null))(strikethroughPrice(node.offers)),
         };
+      } else if (!product && isProductGroup(node)) {
+        product = fromProductGroup(node);
       } else if (!categories.length && isBreadcrumb(node)) {
         categories = breadcrumbNames(node);
       }
