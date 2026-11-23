@@ -105,6 +105,11 @@
     idle(product);
   }
 
+  // El popup de la extensión pide los datos del producto de la pestaña activa.
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === 'getProduct') sendResponse(readProduct());
+  });
+
   tick();
   setInterval(tick, 1500);
 })();

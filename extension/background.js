@@ -31,7 +31,3 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === 'install') chrome.runtime.openOptionsPage();
 });
-
-chrome.action.onClicked.addListener(async () => {
-  chrome.tabs.create({ url: await getApi() });
-});

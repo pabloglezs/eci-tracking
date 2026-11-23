@@ -14,5 +14,5 @@
     }
   ],
   "options_page": "options.html",
-  "action": { "default_title": "Abrir ECI Tracker" }
+  "action": { "default_title": "ECI Tracker", "default_popup": "popup.html" }
 }

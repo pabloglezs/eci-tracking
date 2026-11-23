@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root { color-scheme: light dark; }
+    body { width: 320px; margin: 0; padding: 14px; font: 14px/1.4 system-ui, sans-serif; }
+    h1 { font-size: 15px; margin: 0 0 10px; }
+    .name { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 4px; }
+    .price { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+    .muted { color: #888; margin: 0 0 12px; }
+    button, a.btn {
+      display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none;
+      font: inherit; font-weight: 600; padding: 10px; border-radius: 8px; border: 1px solid #2563eb;
+      background: #2563eb; color: #fff; cursor: pointer; margin-top: 8px;
+    }
+    button.secondary, a.btn.secondary { background: transparent; color: #2563eb; }
+    button:disabled { opacity: .7; cursor: wait; }
+    a.btn.ok { background: #0a7d3b; border-color: #0a7d3b; }
+    .err { color: #b3261e; margin: 8px 0 0; }
+  </style>
+</head>
+<body>
+  <h1>📉 ECI Tracker</h1>
+  <div id="view"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

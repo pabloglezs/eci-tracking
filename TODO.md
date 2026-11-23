@@ -28,7 +28,8 @@
 - [ ] Ordenar/filtrar listado (mayor bajada, mínimo histórico, categoría)
 - [ ] Paginación (el listado carga todo; hay que paginar y optimizar la query cuando haya miles de productos)
 - [ ] Añadir producto pegando la URL desde la web (sin extensión)
-- [ ] Botón en la extensión para ver el estado de un producto ya seguido + popup
+- [x] Popup en el icono de la extensión (seguir producto de la pestaña activa)
+- [ ] Mostrar en el popup el estado de un producto ya seguido (precio actual y mínimo)
 - [ ] Gestión de suscripciones: «darme de baja de todo» por email
 - [ ] Resumen semanal por email (opcional)
 - [ ] Versión Firefox de la extensión
