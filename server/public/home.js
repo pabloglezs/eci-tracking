@@ -19,6 +19,8 @@ let page = 1;
 let data = null; // última respuesta
 let items = []; // tarjetas acumuladas ("Cargar más")
 let loadId = 0;
+let dealsId = 0;
+let dealsKey = null;
 
 function card(p) {
   const img = p.image
@@ -66,7 +68,7 @@ function renderChips() {
 
 function render() {
   renderChips();
-  $('#title').textContent = state.deals ? '🔥 Ofertas' : 'Productos seguidos';
+  $('#title').textContent = state.deals ? 'Sólo ofertas' : 'Todos los productos';
   $('#sort').value = state.sort;
   $('#deals-only').checked = state.deals;
   if (document.activeElement !== $('#q')) $('#q').value = state.q;
@@ -89,6 +91,35 @@ function render() {
   $('#more').textContent = `Cargar más (${total - items.length} restantes)`;
 }
 
+/** Bloque fijo con las 8 mejores ofertas; respeta q/cat/sub, no el orden ni la página. */
+async function loadDeals() {
+  const block = $('#deals-block');
+  // Con «Sólo ofertas» el listado ya es lo mismo: el bloque sobra.
+  if (state.deals) {
+    dealsId++;
+    dealsKey = null;
+    block.hidden = true;
+    return;
+  }
+  const params = new URLSearchParams({ deals: '1', sort: 'drop', limit: 8 });
+  if (state.q) params.set('q', state.q);
+  if (state.cat) params.set('cat', state.cat);
+  if (state.cat && state.sub) params.set('sub', state.sub);
+  const key = params.toString();
+  if (key === dealsKey) return; // cambió sólo el orden o la página
+  dealsKey = key;
+  const id = ++dealsId;
+  try {
+    const res = await api('/api/products?' + key);
+    if (id !== dealsId) return;
+    $('#deals').innerHTML = res.products.map(card).join('');
+    block.hidden = !res.products.length;
+  } catch {
+    if (id === dealsId) block.hidden = true; // el listado de abajo ya muestra errores
+    dealsKey = null;
+  }
+}
+
 async function load({ append = false } = {}) {
   const id = ++loadId;
   page = append ? page + 1 : 1;
@@ -108,6 +139,7 @@ async function load({ append = false } = {}) {
       return load();
     }
     data = res;
+    if (!append) loadDeals();
     items = append ? [...items, ...res.products] : res.products;
     render();
   } catch (e) {
@@ -194,6 +226,7 @@ $('#add').addEventListener('submit', async (e) => {
       'ok',
     );
     input.value = '';
+    dealsKey = null;
     load();
   } catch (e2) {
     setAddMsg(esc(e2.message || 'No se pudo añadir el producto'), 'err');

@@ -133,3 +133,10 @@ button:disabled { opacity: .6; cursor: progress; }
   .price { font-size: 17px; }
   .badge { top: 12px; left: 12px; }
 }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.deals-block { margin-bottom: 28px; }
+.deals-block[hidden] { display: none; }
+.deals-block h2 { margin: 0 0 2px; }
+.deals-sub { margin: 0 0 12px; font-size: 14px; }
+.toolbar h2 { margin: 0; font-size: 22px; }

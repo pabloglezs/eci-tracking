@@ -14,6 +14,7 @@
     </div>
   </header>
   <main class="wrap">
+    <h1 class="sr-only">ECI Tracker: histórico de precios de El Corte Inglés</h1>
     <form id="add" class="add" novalidate>
       <label for="add-url" class="add-label">Seguir un producto nuevo</label>
       <div class="add-row">
@@ -26,8 +27,14 @@
     <nav id="cats" class="chips" aria-label="Categorías"></nav>
     <nav id="subs" class="chips chips-sub" aria-label="Subcategorías"></nav>
 
+    <section id="deals-block" class="deals-block" aria-labelledby="deals-h" hidden>
+      <h2 id="deals-h">🔥 Ofertas</h2>
+      <p class="muted deals-sub">Las mejores bajadas de los últimos 7 días.</p>
+      <div id="deals" class="grid"></div>
+    </section>
+
     <div class="toolbar">
-      <h1 id="title">Productos seguidos</h1>
+      <h2 id="title">Todos los productos</h2>
       <div class="controls">
         <label class="check"><input type="checkbox" id="deals-only"> Sólo ofertas</label>
         <label class="sort">Ordenar
