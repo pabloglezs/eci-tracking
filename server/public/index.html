@@ -14,15 +14,43 @@
     </div>
   </header>
   <main class="wrap">
+    <h1 class="sr-only">ECI Tracker: histórico de precios de El Corte Inglés</h1>
+    <form id="add" class="add" novalidate>
+      <label for="add-url" class="add-label">Seguir un producto nuevo</label>
+      <div class="add-row">
+        <input type="url" id="add-url" placeholder="Pega la URL de un producto de elcorteingles.es" autocomplete="off" inputmode="url">
+        <button class="primary" type="submit" id="add-btn">Seguir precio</button>
+      </div>
+      <p id="add-msg" class="msg" role="status" aria-live="polite"></p>
+    </form>
+
     <nav id="cats" class="chips" aria-label="Categorías"></nav>
     <nav id="subs" class="chips chips-sub" aria-label="Subcategorías"></nav>
 
-    <h1>🔥 Ofertas</h1>
-    <p class="muted" style="margin-top:-8px">Productos que han bajado de precio en los últimos 7 días.</p>
-    <div id="deals" class="grid"></div>
+    <section id="deals-block" class="deals-block" aria-labelledby="deals-h" hidden>
+      <h2 id="deals-h">🔥 Ofertas</h2>
+      <p class="muted deals-sub">Las mejores bajadas de los últimos 7 días.</p>
+      <div id="deals" class="grid"></div>
+    </section>
 
-    <h2>Todos los productos seguidos</h2>
-    <div id="all"></div>
+    <div class="toolbar">
+      <h2 id="title">Todos los productos</h2>
+      <div class="controls">
+        <label class="check"><input type="checkbox" id="deals-only"> Sólo ofertas</label>
+        <label class="sort">Ordenar
+          <select id="sort">
+            <option value="drop">Mayor bajada</option>
+            <option value="recent">Más recientes</option>
+            <option value="price_asc">Precio: menor a mayor</option>
+            <option value="price_desc">Precio: mayor a menor</option>
+            <option value="near_min">Cerca del mínimo histórico</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <p id="count" class="muted count" aria-live="polite"></p>
+    <div id="list" class="grid"></div>
+    <div class="more"><button id="more" type="button" hidden>Cargar más</button></div>
   </main>
   <script type="module" src="/home.js"></script>
 </body>

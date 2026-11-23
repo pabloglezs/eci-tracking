@@ -56,14 +56,17 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
   app.get('/api/health', async () => ({ ok: true }));
 
   app.get('/api/products', async (req) => {
-    const { q = '', deals } = req.query;
-    return {
-      products: listProducts(db, {
-        q: String(q).slice(0, 100),
-        dealsOnly: deals === '1' || deals === 'true',
-        tz: config.timezone,
-      }),
-    };
+    const { q = '', deals, cat = '', sub = '', sort = 'drop', page, limit } = req.query;
+    return listProducts(db, {
+      q: String(q).slice(0, 100),
+      dealsOnly: deals === '1' || deals === 'true',
+      cat: String(cat).slice(0, 100),
+      sub: String(sub).slice(0, 100),
+      sort: String(sort),
+      page: Number(page) || 1,
+      limit: Number(limit) || 24,
+      tz: config.timezone,
+    });
   });
 
   app.get('/api/products/:id', async (req, reply) => {
