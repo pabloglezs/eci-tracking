@@ -204,16 +204,30 @@
   const STOP_TAGS = new Set(['BODY', 'MAIN', 'HTML', 'UL', 'OL', 'HEADER', 'NAV', 'FOOTER', 'FORM']);
   const idOf = (a) => (a.getAttribute('href') || '').split(/[?#]/)[0].match(ID_RE)?.[1] ?? null;
 
-  // Detección independiente de las clases de ECI: parte de los enlaces a producto y sube al
-  // ancestro más pequeño que contiene una imagen y un precio (€) (las variantes de color de una tarjeta enlazan a otros ids, así que no se exige un único id).
+  // Detección independiente de las clases de ECI: se parte de los enlaces a producto y se sube
+  // mientras el ancestro siga conteniendo UN solo producto (las variantes de color comparten el
+  // prefijo A\d+ del id). La tarjeta es el último ancestro antes de abarcar otro producto o de
+  // llegar a UL/OL/MAIN/BODY/FORM; basta con que tenga una imagen (agotados y sin precio incluidos).
+  const baseId = (id) => id.match(/^A\d+/)[0];
+  const MAX_CARD_H = 1100; // un contenedor más alto no es una tarjeta (p. ej. una rejilla con un solo producto)
+
   function climbToCard(a) {
+    const base = baseId(idOf(a));
+    let card = null;
     let el = a;
-    for (let d = 0; d < 8 && el.parentElement; d++) {
+    for (let d = 0; d < 10 && el.parentElement; d++) {
       el = el.parentElement;
-      if (STOP_TAGS.has(el.tagName) || el.matches(EXCLUDE)) return null;
-      if (el.querySelector('img') && /€/.test(el.textContent)) return el;
+      if (STOP_TAGS.has(el.tagName) || el.matches(EXCLUDE)) break;
+      let other = false;
+      for (const l of el.querySelectorAll('a[href]')) {
+        const i = idOf(l);
+        if (i && baseId(i) !== base) { other = true; break; }
+      }
+      if (other || el.querySelector('h1')) break;
+      if (el.offsetHeight > MAX_CARD_H) break;
+      card = el;
     }
-    return null;
+    return card?.querySelector('img') ? card : null;
   }
 
   function findCards() {
@@ -222,10 +236,9 @@
       const id = idOf(a);
       if (!id || a.closest(EXCLUDE) || a.closest(CARD_SEL) || a.closest('[data-eci-card]')) continue;
       const card = climbToCard(a);
-      if (!card || card.closest(CARD_SEL)) continue;
-      // Evitar anidar: si ya hay una tarjeta dentro (o es una tarjeta ya marcada), no se duplica.
-      if (card.querySelector('[data-eci-card]')) continue;
-      cards.add(card);
+      // Donde existe el marcado conocido (article.product_preview, verificado en listados y
+      // búsquedas) se prefiere esa tarjeta a su contenedor, para no cambiar la posición del botón.
+      if (card) cards.add(card.querySelector(CARD_SEL) ?? card);
     }
     // Si dos candidatos se anidan (enlace del título y de la imagen), se queda el exterior.
     for (const c of cards) for (const o of cards) if (c !== o && c.contains(o)) cards.delete(o);
@@ -242,7 +255,7 @@
   function currentPrice(card) {
     const sale = [...card.querySelectorAll('.sr-only, [class*="sr-only" i], [class*="visually-hidden" i]')]
       .map((e) => e.textContent)
-      .find((t) => /precio de venta|precio actual|ahora/i.test(t));
+      .find((t) => /precio de venta|precio actual|ahora/i.test(t) && !/pvp|antes|anterior|recomendado/i.test(t));
     const sm = sale && [...sale.matchAll(AMOUNT)][0];
     if (sm) return toNum(sm[1]);
     const clone = card.cloneNode(true);
