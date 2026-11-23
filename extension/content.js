@@ -2,6 +2,37 @@
 (() => {
   const ID_RE = /\/(A\d{6,}(?:-\d{6,})?)(?=-|\/|$)/;
   const HOST_ID = 'eci-tracker-root';
+  const ext = globalThis.browser ?? globalThis.chrome;
+
+  // Restos de una instancia anterior (p. ej. extensión recargada con la pestaña abierta):
+  // se quitan para no duplicar botones.
+  document.getElementById(HOST_ID)?.remove();
+  document.querySelectorAll('[data-eci-mini]').forEach((n) => n.remove());
+
+  let dead = false; // la extensión se recargó/desinstaló: este script quedó huérfano
+  const timers = [];
+  let observer;
+
+  function shutdown() {
+    if (dead) return;
+    dead = true;
+    observer?.disconnect();
+    timers.forEach(clearInterval);
+    document.getElementById(HOST_ID)?.remove();
+    document.querySelectorAll('[data-eci-mini]').forEach((n) => n.remove());
+  }
+
+  // Mensaje al background tolerante a "Extension context invalidated".
+  async function send(msg) {
+    if (dead) return { ok: false, error: 'Recarga la página (la extensión se actualizó)' };
+    try {
+      if (!ext?.runtime?.id) throw new Error('invalidated');
+      return await ext.runtime.sendMessage(msg);
+    } catch {
+      if (!ext?.runtime?.id) shutdown();
+      return { ok: false, error: 'No se pudo contactar con la extensión. Recarga la página.' };
+    }
+  }
 
   function* walk(node) {
     if (Array.isArray(node)) for (const n of node) yield* walk(n);
@@ -27,6 +58,9 @@
       }
       for (const n of walk(json)) {
         if (![].concat(n['@type'] ?? []).includes('Product')) continue;
+        // En navegación SPA el JSON-LD puede ser aún el del producto anterior.
+        const ldId = String(n.url ?? '').match(ID_RE)?.[1];
+        if (ldId && ldId !== location.pathname.match(ID_RE)?.[1]) continue;
         const offer = [].concat(n.offers ?? [])[0];
         const img = [].concat(n.image ?? [])[0];
         return {
@@ -52,6 +86,12 @@
     .ok { background: #0a7d3b; }
     .err { background: #fff; color: #b3261e; border: 1px solid #b3261e; border-radius: 12px; padding: 10px 14px;
       max-width: 280px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+    .card { background: #fff; color: #1a1a1a; border-radius: 14px; padding: 12px 14px; min-width: 220px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+    .card .btn { text-align: center; box-shadow: none; padding: 9px 14px; }
+    .badge { color: #0a7d3b; font-weight: 600; }
+    .stats { display: flex; gap: 14px; }
+    .stats .k { display: block; font-size: 11px; color: #666; text-transform: uppercase; }
     .row { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
   `;
 
@@ -74,17 +114,42 @@
   const escapeHtml = (s) =>
     String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-  function idle(product) {
+  const eur = (n) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n);
+
+  // Producto ya seguido: precios y enlace al historial en lugar del botón.
+  function showTracked(info) {
+    const st = info.stats;
+    const cell = (k, v) => `<div><span class="k">${k}</span><b>${eur(v)}</b></div>`;
+    show(`<div class="card"><div class="badge">✓ Siguiendo en ECI Tracker</div>${
+      st ? `<div class="stats">${cell('Actual', st.current)}${cell('Mín.', st.min.price)}${cell('Máx.', st.max.price)}</div>` : ''
+    }<a class="btn ok" href="${escapeHtml(info.webUrl)}" target="_blank" rel="noopener">Ver historial</a></div>`);
+  }
+
+  // Consulta si el producto ya se sigue; ignora la respuesta si mientras tanto se navegó a otro.
+  async function refreshStatus(product) {
+    const id = new URL(product.url).pathname.match(ID_RE)?.[1];
+    if (!id) return;
+    const key = currentUrl;
+    const info = await send({ type: 'info', id });
+    if (dead || key !== currentUrl || !host?.isConnected) return;
+    if (info?.ok && info.found) showTracked(info);
+    // 404 o error (servidor caído/lento): se deja el botón "Seguir precio".
+  }
+
+  function idle(product, checkStatus = true) {
+    if (checkStatus) refreshStatus(product);
     show(`<button>📉 Seguir precio</button>`, async () => {
       show(`<button disabled>Guardando…</button>`);
-      const res = await chrome.runtime.sendMessage({ type: 'track', payload: product });
+      const res = await send({ type: 'track', payload: product });
       if (res?.ok) {
+        const info = await send({ type: 'info', id: new URL(product.url).pathname.match(ID_RE)?.[1] });
+        if (info?.ok && info.found) return showTracked(info);
         show(`<a class="btn ok" href="${escapeHtml(res.webUrl)}" target="_blank" rel="noopener">✓ ${
           res.created ? 'Siguiendo' : 'Ya se seguía'
         } · Ver historial</a>`);
       } else {
         show(`<div class="err">${escapeHtml(res?.error || 'Error desconocido')}</div><button>Reintentar</button>`, () =>
-          idle(product),
+          idle(product, false),
         );
       }
     });
@@ -92,15 +157,18 @@
 
   // ECI navega a veces sin recargar la página: revisamos si cambió la URL.
   function tick() {
+    if (dead || document.hidden) return;
     const key = location.origin + location.pathname;
-    if (key === currentUrl) return;
-    currentUrl = key;
+    if (key === currentUrl && host?.isConnected) return;
     const product = readProduct();
     if (!product) {
+      // Sin ficha (o JSON-LD aún sin cargar en una navegación SPA): se reintenta en el siguiente tick.
+      currentUrl = '';
       host?.remove();
       host = null;
       return;
     }
+    currentUrl = key;
     if (!host?.isConnected) mount();
     idle(product);
   }
@@ -170,7 +238,7 @@
     paintMini(e, 'busy');
     let res;
     try {
-      res = await chrome.runtime.sendMessage({ type: 'track', payload: e.payload });
+      res = await send({ type: 'track', payload: e.payload });
     } catch {
       res = { ok: false, error: 'Recarga la página (la extensión se actualizó)' };
     }
@@ -184,9 +252,21 @@
   }
 
   function addMini(card) {
-    if (card.querySelector(':scope > [data-eci-mini]')) return;
     const data = cardData(card);
+    const existing = card.querySelector(':scope > [data-eci-mini]');
+    if (existing) {
+      // Las tarjetas se reciclan: si ahora muestran otro producto, se actualiza el botón.
+      const e = minis.get(existing);
+      if (e && data && e.id !== data.id) {
+        e.id = data.id;
+        e.payload = data.payload;
+        paintMini(e, tracked.has(data.id) ? 'ok' : 'idle');
+      }
+      return;
+    }
     if (!data) return;
+    // El botón se posiciona sobre la tarjeta (también en modo lista): ésta debe ser su referencia.
+    if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
     const host = document.createElement('div');
     host.dataset.eciMini = '1';
     host.style.cssText = 'position:absolute;top:12px;left:12px;z-index:20;';
@@ -209,6 +289,7 @@
   let statusBlockedUntil = 0;
 
   async function scan() {
+    if (dead || document.hidden) return;
     for (const card of document.querySelectorAll(CARD_SEL)) addMini(card);
     for (const host of minis.keys()) if (!host.isConnected) minis.delete(host);
 
@@ -219,7 +300,7 @@
     fresh.forEach((id) => queried.add(id));
     let res;
     try {
-      res = await chrome.runtime.sendMessage({ type: 'status', ids: fresh });
+      res = await send({ type: 'status', ids: fresh });
     } catch {
       return; // extensión recargada: el botón seguirá funcionando tras recargar la página
     }
@@ -238,14 +319,15 @@
     clearTimeout(scanTimer);
     scanTimer = setTimeout(scan, 300);
   };
-  new MutationObserver(scheduleScan).observe(document.documentElement, { childList: true, subtree: true });
+  observer = new MutationObserver(scheduleScan);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
   scheduleScan();
 
   // El popup de la extensión pide los datos del producto de la pestaña activa.
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === 'getProduct') sendResponse(readProduct());
+  ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (!dead && msg?.type === 'getProduct') sendResponse(readProduct());
   });
 
   tick();
-  setInterval(tick, 1500);
+  timers.push(setInterval(tick, 1500));
 })();

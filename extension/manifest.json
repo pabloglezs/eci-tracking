@@ -3,16 +3,38 @@
   "name": "ECI Tracker",
   "version": "0.1.0",
   "description": "Sigue el precio de productos de El Corte Inglés y consulta su histórico en tu ECI Tracker.",
-  "permissions": ["storage"],
-  "host_permissions": ["https://www.elcorteingles.es/*"],
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.elcorteingles.es/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["https://www.elcorteingles.es/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://www.elcorteingles.es/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "options_page": "options.html",
-  "action": { "default_title": "ECI Tracker", "default_popup": "popup.html" }
+  "action": {
+    "default_title": "ECI Tracker",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }
