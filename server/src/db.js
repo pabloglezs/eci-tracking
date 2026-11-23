@@ -58,6 +58,26 @@ export function openDb(path) {
   for (const c of ['category', 'subcategory', 'category_path']) {
     if (!cols.includes(c)) db.exec(`ALTER TABLE products ADD COLUMN ${c} TEXT`);
   }
+  // --- Robustez del scraper: estado del producto, stock, precio tachado y métricas ---
+  const cols2 = db.prepare('PRAGMA table_info(products)').all().map((c) => c.name);
+  const add = {
+    status: "TEXT NOT NULL DEFAULT 'active'", // active | gone
+    in_stock: 'INTEGER', // 1 / 0 / NULL (desconocido)
+    original_price: 'REAL', // precio tachado de ECI
+    gone_count: 'INTEGER NOT NULL DEFAULT 0',
+    gone_day: 'TEXT',
+  };
+  for (const [c, def] of Object.entries(add)) {
+    if (!cols2.includes(c)) db.exec(`ALTER TABLE products ADD COLUMN ${c} ${def}`);
+  }
+  db.exec(`CREATE TABLE IF NOT EXISTS check_runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at  TEXT NOT NULL,
+    finished_at TEXT,
+    ok          INTEGER NOT NULL DEFAULT 0,
+    failed      INTEGER NOT NULL DEFAULT 0,
+    skipped     INTEGER NOT NULL DEFAULT 0
+  )`);
   return db;
 }
 
