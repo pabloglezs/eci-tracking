@@ -48,4 +48,9 @@ export const config = {
   adminEmail: env.ADMIN_EMAIL || '',
   adminAlertFailPct: Number(env.ADMIN_ALERT_FAIL_PCT) || 50,
   adminAlertMinSample: Number(env.ADMIN_ALERT_MIN_SAMPLE) || 3,
+  // Alertas: caducidad de suscripciones sin confirmar y purga de email_queue.
+  confirmMaxPerEmailDay: Number(env.CONFIRM_MAX_PER_EMAIL_DAY) || 5,
+  confirmTtlDays: Number(env.CONFIRM_TTL_DAYS) || 7,
+  queueSentRetentionDays: Number(env.QUEUE_SENT_RETENTION_DAYS) || 30,
+  queueFailedRetentionDays: Number(env.QUEUE_FAILED_RETENTION_DAYS) || 60,
 };

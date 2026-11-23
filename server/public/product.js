@@ -106,10 +106,12 @@ function render() {
     <div class="panel">
       <form class="sub" id="sub">
         <input type="email" name="email" placeholder="tu@email.com" required autocomplete="email" aria-label="Email">
+        <input type="text" name="targetPrice" class="target" inputmode="decimal" placeholder="Precio objetivo € (opcional)" aria-label="Precio objetivo en euros (opcional)">
         <button class="primary">Activar alerta</button>
       </form>
+      <p class="muted alerts-hint">Sin objetivo te avisamos cuando baje respecto al día anterior. Con objetivo, cuando llegue a ese precio o menos. Te enviaremos un email para confirmar.</p>
       <div class="msg" id="msg"></div>
-      <p class="muted" style="margin:8px 0 0;font-size:13px">${subscribers} persona(s) siguen este producto. Cada email incluye un enlace para darte de baja.</p>
+      <p class="muted" style="margin:8px 0 0;font-size:13px">${subscribers} persona(s) siguen este producto. Cada email incluye enlaces para darte de baja.</p>
     </div>`;
 
   draw();
@@ -128,10 +130,13 @@ function render() {
       const r = await api(`/api/products/${encodeURIComponent(id)}/subscribe`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: new FormData(e.target).get('email') }),
+        body: JSON.stringify({
+          email: new FormData(e.target).get('email'),
+          targetPrice: new FormData(e.target).get('targetPrice') || undefined,
+        }),
       });
       msg.className = 'msg ok';
-      msg.textContent = r.created ? '¡Listo! Te avisaremos por email.' : 'Ya estabas apuntado a este producto.';
+      msg.textContent = '📧 Revisa tu email para confirmar la alerta (mira también en spam). Hasta que confirmes no se activa.';
       e.target.reset();
     } catch (err) {
       msg.className = 'msg err';

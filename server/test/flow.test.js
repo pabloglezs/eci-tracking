@@ -6,6 +6,7 @@ import { recordPrice, upsertProduct, addSubscription } from '../src/store.js';
 import { checkProduct } from '../src/checker.js';
 import { processQueue } from '../src/mailer.js';
 
+const post = (app, url, token) => app.inject({ method: 'POST', url, headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload: `token=${token}` });
 const TZ = 'Europe/Madrid';
 const day = (s) => new Date(`${s}T12:00:00Z`);
 const P = {
@@ -27,8 +28,8 @@ test('recordPrice detecta bajada respecto al día anterior y no duplica avisos',
 test('bajada de precio => cola de emails => envío a todos los suscriptores', async () => {
   const db = openDb(':memory:');
   const { product } = upsertProduct(db, P);
-  addSubscription(db, P.id, 'a@x.com', 'tok-a-0123456789abcdef');
-  addSubscription(db, P.id, 'b@x.com', 'tok-b-0123456789abcdef');
+  addSubscription(db, P.id, 'a@x.com', 'tok-a-0123456789abcdef', { confirmed: true });
+  addSubscription(db, P.id, 'b@x.com', 'tok-b-0123456789abcdef', { confirmed: true });
   recordPrice(db, P.id, 100, TZ, new Date(Date.now() - 864e5 * 2)); // antes de hoy
 
   const r = await checkProduct(db, product, { scrape: async () => ({ price: 80 }), tz: TZ });
@@ -117,11 +118,11 @@ test('API: alta, consulta, suscripción y baja', async () => {
   const badMail = await app.inject({ method: 'POST', url: `/api/products/${P.id}/subscribe`, payload: { email: 'nope' } });
   assert.equal(badMail.statusCode, 400);
   const sub = await app.inject({ method: 'POST', url: `/api/products/${P.id}/subscribe`, payload: { email: 'A@X.com' } });
-  assert.equal(sub.json().created, true);
-  assert.equal((await app.inject({ method: 'POST', url: `/api/products/${P.id}/subscribe`, payload: { email: 'a@x.com' } })).json().created, false);
-
-  const { token } = db.prepare('SELECT token FROM subscriptions').get();
-  assert.equal((await app.inject({ url: `/api/unsubscribe?token=${token}` })).statusCode, 200);
-  assert.equal((await app.inject({ url: `/api/unsubscribe?token=${token}` })).statusCode, 404);
+  const sub2 = await app.inject({ method: 'POST', url: `/api/products/${P.id}/subscribe`, payload: { email: 'a@x.com' } });
+  assert.deepEqual(sub.json(), sub2.json()); // misma respuesta exista o no la suscripción
+  const { token, confirmed_at } = db.prepare('SELECT token, confirmed_at FROM subscriptions').get();
+  assert.equal(confirmed_at, null); // pendiente hasta confirmar
+  assert.equal((await post(app, '/api/unsubscribe', token)).statusCode, 200);
+  assert.equal((await post(app, '/api/unsubscribe', token)).statusCode, 404);
   await app.close();
 });

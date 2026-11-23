@@ -2,7 +2,7 @@ import { config } from './config.js';
 import { today } from './db.js';
 import { fetchProduct } from './scraper.js';
 import { recordPrice } from './store.js';
-import { enqueueDropAlerts } from './mailer.js';
+import { enqueueAlerts } from './mailer.js';
 import { maybeAlertAdmin } from './adminAlerts.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,10 +37,7 @@ export async function checkProduct(db, product, { scrape = fetchProduct, tz = co
     );
     if (inStock === 0) return { ok: true, outOfStock: true };
     const r = recordPrice(db, product.id, data.price, tz);
-    if (r.dropped) {
-      const fresh = db.prepare('SELECT * FROM products WHERE id = ?').get(product.id);
-      enqueueDropAlerts(db, fresh, r.previous, r.price);
-    }
+    enqueueAlerts(db, db.prepare('SELECT * FROM products WHERE id = ?').get(product.id), r);
     return { ok: true, ...r };
   } catch (e) {
     const now = new Date();
