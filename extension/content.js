@@ -8,6 +8,7 @@
   // se quitan para no duplicar botones.
   document.getElementById(HOST_ID)?.remove();
   document.querySelectorAll('[data-eci-mini]').forEach((n) => n.remove());
+  document.querySelectorAll('[data-eci-card]').forEach((n) => delete n.dataset.eciCard);
 
   let dead = false; // la extensión se recargó/desinstaló: este script quedó huérfano
   const timers = [];
@@ -20,6 +21,7 @@
     timers.forEach(clearInterval);
     document.getElementById(HOST_ID)?.remove();
     document.querySelectorAll('[data-eci-mini]').forEach((n) => n.remove());
+  document.querySelectorAll('[data-eci-card]').forEach((n) => delete n.dataset.eciCard);
   }
 
   // Mensaje al background tolerante a "Extension context invalidated".
@@ -197,21 +199,79 @@
   const queried = new Set(); // ids ya consultados al servidor
   let webBase = null;
 
+  // Enlaces que no son tarjetas de producto (menús, migas, cabecera, pie).
+  const EXCLUDE = 'header, nav, footer, [role="navigation"], [class*="breadcrumb" i], [class*="megamenu" i], [data-eci-mini]';
+  const STOP_TAGS = new Set(['BODY', 'MAIN', 'HTML', 'UL', 'OL', 'HEADER', 'NAV', 'FOOTER', 'FORM']);
+  const idOf = (a) => (a.getAttribute('href') || '').split(/[?#]/)[0].match(ID_RE)?.[1] ?? null;
+
+  // Detección independiente de las clases de ECI: parte de los enlaces a producto y sube al
+  // ancestro más pequeño que contiene una imagen y un precio (€) (las variantes de color de una tarjeta enlazan a otros ids, así que no se exige un único id).
+  function climbToCard(a) {
+    let el = a;
+    for (let d = 0; d < 8 && el.parentElement; d++) {
+      el = el.parentElement;
+      if (STOP_TAGS.has(el.tagName) || el.matches(EXCLUDE)) return null;
+      if (el.querySelector('img') && /€/.test(el.textContent)) return el;
+    }
+    return null;
+  }
+
+  function findCards() {
+    const cards = new Set(document.querySelectorAll(`${CARD_SEL}, [data-eci-card]`));
+    for (const a of document.querySelectorAll('a[href]')) {
+      const id = idOf(a);
+      if (!id || a.closest(EXCLUDE) || a.closest(CARD_SEL) || a.closest('[data-eci-card]')) continue;
+      const card = climbToCard(a);
+      if (!card || card.closest(CARD_SEL)) continue;
+      // Evitar anidar: si ya hay una tarjeta dentro (o es una tarjeta ya marcada), no se duplica.
+      if (card.querySelector('[data-eci-card]')) continue;
+      cards.add(card);
+    }
+    // Si dos candidatos se anidan (enlace del título y de la imagen), se queda el exterior.
+    for (const c of cards) for (const o of cards) if (c !== o && c.contains(o)) cards.delete(o);
+    return cards;
+  }
+
+  const AMOUNT = /(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*€/g;
+  const toNum = (t) => num(t.replace(/\./g, ''));
+  // Elementos de precio "no vigente": tachado, PVPR, antes, promos.
+  const OLD_PRICE =
+    's, del, strike, [class*="recommended" i], [class*="strike" i], [class*="crossed" i], [class*="old-price" i], [class*="price-old" i], [class*="previous" i], [class*="original" i], [class*="pvp" i], [class*="promo" i], [class*="badge" i], [class*="discount" i]';
+
+  // Precio actual (de venta) de la tarjeta; null si no se puede determinar con fiabilidad.
+  function currentPrice(card) {
+    const sale = [...card.querySelectorAll('.sr-only, [class*="sr-only" i], [class*="visually-hidden" i]')]
+      .map((e) => e.textContent)
+      .find((t) => /precio de venta|precio actual|ahora/i.test(t));
+    const sm = sale && [...sale.matchAll(AMOUNT)][0];
+    if (sm) return toNum(sm[1]);
+    const clone = card.cloneNode(true);
+    clone.querySelectorAll(OLD_PRICE).forEach((n) => n.remove());
+    const scope = clone.querySelector('[class*="pric" i]') ?? clone;
+    const found = new Set();
+    for (const m of scope.textContent.matchAll(AMOUNT)) found.add(toNum(m[1]));
+    found.delete(null);
+    return found.size === 1 ? [...found][0] : null;
+  }
+
   function cardData(card) {
-    const a = card.querySelector('a.product_preview-title');
+    const links = [...card.querySelectorAll('a[href]')].filter((l) => idOf(l));
+    const a = card.querySelector('a.product_preview-title') ?? links.find((l) => l.getAttribute('title') || l.textContent.trim()) ?? links[0];
     if (!a) return null; // tarjeta todavía sin hidratar
-    const path = (a.getAttribute('href') || '').split(/[?#]/)[0];
-    const m = path.match(ID_RE);
-    if (!m) return null;
-    const priceText = card.querySelector('.price-omnibus__formatted-price')?.textContent ?? '';
-    const pm = priceText.match(/([\d.]+(?:,\d{1,2})?)\s*€/);
+    const id = idOf(a);
+    if (!id) return null;
+    const path = a.getAttribute('href').split(/[?#]/)[0];
+    const img = card.querySelector('img.js_preview_image') ?? card.querySelector('img');
+    const name =
+      a.getAttribute('title') || a.textContent.trim() || img?.getAttribute('alt') || card.querySelector('h2,h3,h4')?.textContent.trim();
+    if (!name) return null;
     return {
-      id: m[1],
+      id,
       payload: {
         url: location.origin + path,
-        name: a.getAttribute('title') || a.textContent.trim(),
-        image: card.querySelector('img.js_preview_image')?.src,
-        price: pm ? num(pm[1].replace(/\./g, '')) : null,
+        name,
+        image: img?.currentSrc || img?.src || undefined,
+        price: currentPrice(card),
       },
     };
   }
@@ -267,6 +327,7 @@
     if (!data) return;
     // El botón se posiciona sobre la tarjeta (también en modo lista): ésta debe ser su referencia.
     if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+    card.dataset.eciCard = '1';
     const host = document.createElement('div');
     host.dataset.eciMini = '1';
     host.style.cssText = 'position:absolute;top:12px;left:12px;z-index:20;';
@@ -290,7 +351,7 @@
 
   async function scan() {
     if (dead || document.hidden) return;
-    for (const card of document.querySelectorAll(CARD_SEL)) addMini(card);
+    for (const card of findCards()) addMini(card);
     for (const host of minis.keys()) if (!host.isConnected) minis.delete(host);
 
     // Una sola consulta por tanda para marcar los que ya están en el tracker.
