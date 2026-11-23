@@ -64,6 +64,8 @@ test('parseProductHtml lee JSON-LD de Product', () => {
     name: 'Móvil "X"',
     image: 'https://dam.elcorteingles.es/a.jpg',
     price: 2149,
+    inStock: null,
+    originalPrice: null,
     categories: [],
   });
 });

@@ -37,4 +37,15 @@ export const config = {
   // Límite por minuto de las rutas de suscripción.
   subscribePerMinute: Number(env.SUBSCRIBE_PER_MINUTE) || 10,
   mailDelayMs: Number(env.MAIL_DELAY_MS) || 1000,
+  // --- Robustez del scraper ---
+  scrapeRetries: env.SCRAPE_RETRIES === undefined ? 2 : Math.max(0, Number(env.SCRAPE_RETRIES) || 0),
+  scrapeBackoffMs: Number(env.SCRAPE_BACKOFF_MS) || 3000,
+  // 404/410 en tantos días de comprobación distintos => producto descatalogado ('gone').
+  goneAfter: Number(env.GONE_AFTER) || 3,
+  // Cada cuántos días se sondea un producto 'gone' por si vuelve (0 = nunca).
+  goneRecheckDays: env.GONE_RECHECK_DAYS === undefined ? 7 : Number(env.GONE_RECHECK_DAYS) || 0,
+  // Aviso al admin si una pasada diaria falla en >= ese % (o 0 éxitos), con al menos N intentos.
+  adminEmail: env.ADMIN_EMAIL || '',
+  adminAlertFailPct: Number(env.ADMIN_ALERT_FAIL_PCT) || 50,
+  adminAlertMinSample: Number(env.ADMIN_ALERT_MIN_SAMPLE) || 3,
 };

@@ -14,6 +14,7 @@ import {
   sanitizeImage,
   sanitizeName,
   isValidPrice,
+  PRODUCT_ID_RE,
 } from './products.js';
 import {
   getProduct,
@@ -29,6 +30,7 @@ import {
 import { today } from './db.js';
 import { checkSoon, runDailyCheck } from './checker.js';
 import { enqueueWelcome } from './mailer.js';
+import { registerAdminRoutes } from './adminRoutes.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(here, '..', 'public');
@@ -147,6 +149,9 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
         createdAt: product.created_at,
         lastCheckedAt: product.last_checked_at,
         lastError: product.last_error,
+        status: product.status ?? 'active',
+        inStock: product.in_stock == null ? null : product.in_stock === 1,
+        originalPrice: product.original_price ?? null,
       },
       stats: computeStats(history),
       deal: dealInfo(history, today(config.timezone)),
@@ -181,10 +186,11 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
     if (isValidPrice(body.price) && !hasPrices(db, product.id)) {
       recordPrice(db, product.id, body.price, config.timezone);
     }
-    if (created) {
-      trackNew.inc(ip);
-      checkSoon(db, product);
-    }
+    if (created) trackNew.inc(ip);
+    // Un producto descatalogado que alguien vuelve a seguir: se re-sondea (máx. 1 vez al día).
+    const recheckGone =
+      !created && product.status === 'gone' && Date.parse(product.last_checked_at ?? 0) < Date.now() - 864e5;
+    if (created || recheckGone) checkSoon(db, product);
     return reply.code(created ? 201 : 200).send({ created, product: { id: product.id, name: product.name } });
   });
 
@@ -193,7 +199,7 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
   app.get('/api/tracked', limit(120), async (req) => {
     const ids = String(req.query.ids ?? '')
       .split(',')
-      .filter((s) => /^A\d{6,}(?:-\d{6,})?$/.test(s))
+      .filter((s) => PRODUCT_ID_RE.test(s))
       .slice(0, 100);
     if (!ids.length) return { tracked: [] };
     const rows = db.prepare(`SELECT id FROM products WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids);
@@ -232,6 +238,8 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
     runDailyCheck(db).catch((e) => console.error('[check]', e));
     return { started: true };
   });
+
+  registerAdminRoutes(app, db);
 
   if (serveStatic) {
     await app.register(fstatic, { root: PUBLIC_DIR });

@@ -2,9 +2,15 @@
 
 const HOSTS = new Set(['www.elcorteingles.es', 'elcorteingles.es']);
 
+// Id de producto: "A202047813-8806097827146" (catálogo) o "MP_0538405_NF0A8FXA" (marketplace).
+const ID_SRC = String.raw`A\d{6,}(?:-\d{6,})?|MP_\d+_[A-Z0-9]+`;
+export const PRODUCT_ID_RE = new RegExp(`^(?:${ID_SRC})$`);
+const PATH_ID_RE = new RegExp(`/(${ID_SRC})(?=-|/|$)`);
+
 /**
  * Valida una URL de producto de El Corte Inglés y extrae su id.
  * /electronica/A202047813-8806097827146-pr-movil-... -> id "A202047813-8806097827146"
+ * Marketplace: /deportes/MP_0538405_NF0A8FXA-negro-pr-... -> id "MP_0538405_NF0A8FXA"
  * Cada variante (color, talla...) tiene su propio id.
  */
 export function parseProductUrl(raw) {
@@ -15,7 +21,7 @@ export function parseProductUrl(raw) {
     return null;
   }
   if (!['https:', 'http:'].includes(u.protocol) || !HOSTS.has(u.hostname)) return null;
-  const m = u.pathname.match(/\/(A\d{6,}(?:-\d{6,})?)(?=-|\/|$)/);
+  const m = u.pathname.match(PATH_ID_RE);
   if (!m) return null;
   return { id: m[1], url: `https://www.elcorteingles.es${u.pathname}` };
 }
