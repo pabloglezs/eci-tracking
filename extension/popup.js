@@ -24,7 +24,7 @@ function notProduct(msg) {
   document.getElementById('opts').onclick = () => ext.runtime.openOptionsPage();
 }
 
-const ID_RE = /\/(A\d{6,}(?:-\d{6,})?)(?=-|\/|$)/;
+const ID_RE = /\/((?:A\d{6,}(?:-\d{6,})?)|(?:MP_\d+_[A-Z0-9]+))(?=-|\/|$)/;
 
 // Producto que ya se sigue: precios y enlace al historial en lugar del botón.
 function showTracked(product, info) {

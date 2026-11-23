@@ -52,7 +52,7 @@ async function status(ids) {
 // Estado de un producto concreto: precio actual, mínimo, máximo. 404 = no se sigue todavía.
 async function info(id) {
   const api = await getApi();
-  if (!/^A\d{6,}(?:-\d{6,})?$/.test(String(id))) return { ok: false, error: 'Id de producto no válido' };
+  if (!/^(?:A\d{6,}(?:-\d{6,})?|MP_\d+_[A-Z0-9]+)$/.test(String(id))) return { ok: false, error: 'Id de producto no válido' };
   try {
     const res = await fetchT(`${api}/api/products/${encodeURIComponent(id)}`);
     if (res.status === 404) return { ok: true, found: false, base: api };

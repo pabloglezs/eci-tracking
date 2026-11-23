@@ -1,6 +1,7 @@
 // Inyecta un botón "Seguir precio" en las páginas de producto de El Corte Inglés.
 (() => {
-  const ID_RE = /\/(A\d{6,}(?:-\d{6,})?)(?=-|\/|$)/;
+  // Ids de producto: A123456[-123456] (catálogo ECI) o MP_<vendedor>_<sku> (marketplace).
+  const ID_RE = /\/((?:A\d{6,}(?:-\d{6,})?)|(?:MP_\d+_[A-Z0-9]+))(?=-|\/|$)/;
   const HOST_ID = 'eci-tracker-root';
   const ext = globalThis.browser ?? globalThis.chrome;
 
@@ -73,7 +74,35 @@
         };
       }
     }
-    return null;
+    return readMarketplaceProduct();
+  }
+
+  // Las fichas de marketplace (MP_<vendedor>_<sku>) no traen un Product con precio en el JSON-LD:
+  // se toma el nombre del <h1>/og:title, la imagen de og:image y el precio de venta del texto accesible.
+  function readMarketplaceProduct() {
+    const pathId = location.pathname.match(ID_RE)?.[1];
+    if (!pathId?.startsWith('MP_')) return null;
+    // En navegación SPA los metadatos pueden ser aún los de la ficha anterior.
+    const canonId = document.querySelector('link[rel="canonical"]')?.href.match(ID_RE)?.[1];
+    if (canonId && canonId !== pathId) return null;
+    const meta = (n) => document.querySelector(`meta[property="${n}"], meta[name="${n}"]`)?.content;
+    const name = (document.querySelector('h1')?.textContent || meta('og:title') || '')
+      .replace(/\s*·\s*El Corte Inglés\s*$/, '')
+      .trim();
+    if (!name) return null;
+    // Precio de venta de la ficha (no el de tarjetas de recomendados, ni «Precio original»/PVPR).
+    let price = null;
+    for (const e of document.querySelectorAll('.sr-only')) {
+      if (e.closest('article.product_preview, [class*="carousel" i]')) continue;
+      const t = e.textContent;
+      if (!/precio de venta/i.test(t) || /original|pvp|antes|anterior/i.test(t)) continue;
+      const m = t.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*€/);
+      if (m) {
+        price = num(m[1].replace(/\./g, ''));
+        break;
+      }
+    }
+    return { url: location.origin + location.pathname, name, image: meta('og:image') || undefined, price };
   }
 
   const STYLE = `
@@ -208,7 +237,8 @@
   // mientras el ancestro siga conteniendo UN solo producto (las variantes de color comparten el
   // prefijo A\d+ del id). La tarjeta es el último ancestro antes de abarcar otro producto o de
   // llegar a UL/OL/MAIN/BODY/FORM; basta con que tenga una imagen (agotados y sin precio incluidos).
-  const baseId = (id) => id.match(/^A\d+/)[0];
+  // En marketplace las variantes cambian el final del SKU: se agrupa por vendedor + 6 primeros caracteres.
+  const baseId = (id) => id.match(/^A\d+|^MP_\d+_[A-Z0-9]{1,6}/)[0];
   const MAX_CARD_H = 1100; // un contenedor más alto no es una tarjeta (p. ej. una rejilla con un solo producto)
 
   function climbToCard(a) {
