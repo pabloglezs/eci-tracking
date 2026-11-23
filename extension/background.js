@@ -15,9 +15,22 @@ async function track(payload) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data.error || `Error ${res.status}` };
-    return { ok: true, created: data.created, webUrl: `${api}/p/${encodeURIComponent(data.product.id)}` };
+    return { ok: true, created: data.created, base: api, webUrl: `${api}/p/${encodeURIComponent(data.product.id)}` };
   } catch {
     return { ok: false, error: `No se pudo conectar con ${api}. Revisa la URL en las opciones de la extensión.` };
+  }
+}
+
+// Qué ids de una lista ya están en el tracker (para marcar las tarjetas de los listados).
+async function status(ids) {
+  const api = await getApi();
+  try {
+    const res = await fetch(`${api}/api/tracked?ids=${ids.map(encodeURIComponent).join(',')}`);
+    if (!res.ok) return { ok: false };
+    const data = await res.json();
+    return { ok: true, tracked: data.tracked ?? [], base: api };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -25,6 +38,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === 'track') {
     track(msg.payload).then(sendResponse);
     return true; // respuesta asíncrona
+  }
+  if (msg?.type === 'status') {
+    status(msg.ids).then(sendResponse);
+    return true;
   }
 });
 

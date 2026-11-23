@@ -30,6 +30,7 @@
 - [ ] Paginación (el listado carga todo; hay que paginar y optimizar la query cuando haya miles de productos)
 - [ ] Añadir producto pegando la URL desde la web (sin extensión)
 - [x] Popup en el icono de la extensión (seguir producto de la pestaña activa)
+- [x] Mini botón 📉/✓ en las tarjetas de listados y búsquedas de ECI
 - [ ] Mostrar en el popup el estado de un producto ya seguido (precio actual y mínimo)
 - [ ] Gestión de suscripciones: «darme de baja de todo» por email
 - [ ] Resumen semanal por email (opcional)

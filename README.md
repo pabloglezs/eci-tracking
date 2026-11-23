@@ -46,7 +46,8 @@ Lanzar la comprobación diaria sin esperar al cron: define `ADMIN_TOKEN` y haz
 
 1. `chrome://extensions` → activa **Modo desarrollador** → **Cargar descomprimida** → carpeta `extension/`.
 2. En la pantalla de opciones que se abre, pon la URL de tu servidor (`http://localhost:3000` o la pública).
-3. Entra en una ficha de producto de elcorteingles.es: aparece el botón abajo a la derecha.
+3. Entra en una ficha de producto de elcorteingles.es: aparece el botón «Seguir precio» abajo a la derecha (o usa el popup del icono).
+4. En listados y búsquedas aparece un mini botón 📉 arriba a la izquierda de cada tarjeta; los productos que ya están en el tracker salen con ✓ (clic = abrir su historial).
 
 ## Despliegue con Portainer (continuo desde GitHub)
 
@@ -87,6 +88,7 @@ Pon un reverse proxy con HTTPS delante (Nginx Proxy Manager, Traefik, Caddy…) 
 | `POST` | `/api/products` | `{url, name?, image?, price?}` — añade un producto |
 | `POST` | `/api/products/:id/subscribe` | `{email}` — alerta de bajada |
 | `GET` | `/api/unsubscribe?token=` | Baja (enlace en cada email) |
+| `GET` | `/api/tracked?ids=A1,A2` | Cuáles de esos ids ya están en el tracker (máx. 100) |
 
 ## Limitaciones conocidas
 

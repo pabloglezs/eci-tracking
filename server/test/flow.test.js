@@ -73,6 +73,18 @@ test('un fallo de envío reintenta y acaba en failed', async () => {
   assert.equal(m.attempts, 5);
 });
 
+test('API /api/tracked devuelve sólo los ids ya seguidos y descarta basura', async () => {
+  const db = openDb(':memory:');
+  upsertProduct(db, P);
+  const app = await buildApp({ db, serveStatic: false });
+  const ids = [P.id, 'A999999999-8888888888', "x'); DROP TABLE products;--", 'A123'].map(encodeURIComponent).join(',');
+  const r = (await app.inject({ url: `/api/tracked?ids=${ids}` })).json();
+  assert.deepEqual(r.tracked, [P.id]);
+  assert.deepEqual((await app.inject({ url: '/api/tracked' })).json().tracked, []);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM products').get().n, 1);
+  await app.close();
+});
+
 test('API: alta, consulta, suscripción y baja', async () => {
   const db = openDb(':memory:');
   const app = await buildApp({ db, serveStatic: false });

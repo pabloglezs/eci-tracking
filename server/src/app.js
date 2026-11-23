@@ -110,6 +110,18 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
     return reply.code(created ? 201 : 200).send({ created, product: { id: product.id, name: product.name } });
   });
 
+  // Qué productos de una lista de ids ya están en el tracker (lo usa la extensión
+  // para marcar con ✓ las tarjetas de los listados de ECI).
+  app.get('/api/tracked', limit(120), async (req) => {
+    const ids = String(req.query.ids ?? '')
+      .split(',')
+      .filter((s) => /^A\d{6,}(?:-\d{6,})?$/.test(s))
+      .slice(0, 100);
+    if (!ids.length) return { tracked: [] };
+    const rows = db.prepare(`SELECT id FROM products WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+    return { tracked: rows.map((r) => r.id) };
+  });
+
   app.post('/api/products/:id/subscribe', limit(10), async (req, reply) => {
     const product = getProduct(db, req.params.id);
     if (!product) return reply.code(404).send({ error: 'Producto no encontrado' });
