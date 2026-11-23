@@ -1,11 +1,24 @@
-import { $, esc, eur, api } from './common.js';
+import { $, esc, eur, api, sparkline } from './common.js';
 
-const NONE = 'Sin categoría';
-let products = [];
+const PAGE_SIZE = 24;
+const SORTS = ['drop', 'recent', 'price_asc', 'price_desc', 'near_min'];
+
+// Estado en la URL (compartible): ?q=&cat=&sub=&sort=&deals=1
 const state = (() => {
   const p = new URLSearchParams(location.search);
-  return { cat: p.get('cat') || '', sub: p.get('sub') || '' };
+  const sort = p.get('sort');
+  return {
+    q: p.get('q') || '',
+    cat: p.get('cat') || '',
+    sub: p.get('cat') ? p.get('sub') || '' : '',
+    sort: SORTS.includes(sort) ? sort : 'drop',
+    deals: p.get('deals') === '1',
+  };
 })();
+let page = 1;
+let data = null; // última respuesta
+let items = []; // tarjetas acumuladas ("Cargar más")
+let loadId = 0;
 
 function card(p) {
   const img = p.image
@@ -13,104 +26,181 @@ function card(p) {
     : `<div class="noimg">sin imagen</div>`;
   const badge = p.isDeal ? `<span class="badge">-${Math.round(p.dropPct)}%</span>` : '';
   const old = p.isDeal ? `<s>${eur(p.previousPrice)}</s>` : '';
+  const atMin = p.price != null && p.minPrice != null && p.price <= p.minPrice && p.maxPrice > p.minPrice;
   return `<a class="card" href="/p/${encodeURIComponent(p.id)}">${badge}${img}
     <div class="name">${esc(p.name || p.id)}</div>
-    <div class="price">${p.price == null ? '<span class="muted">pendiente…</span>' : eur(p.price)}${old}</div></a>`;
+    <div class="price">${p.price == null ? '<span class="muted">pendiente…</span>' : eur(p.price)}${old}</div>
+    <div class="spark-row">${sparkline(p.spark) || '<span class="muted small">Sin histórico aún</span>'}${
+      atMin ? '<span class="min-tag">mínimo</span>' : ''
+    }</div></a>`;
 }
 
 const empty = (msg) => `<div class="empty" style="grid-column:1/-1">${msg}</div>`;
 
-/** Cuenta productos por clave, ordenado por nº descendente. */
-function count(list, key) {
-  const m = new Map();
-  for (const p of list) m.set(key(p), (m.get(key(p)) ?? 0) + 1);
-  return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'));
-}
-
 const chip = (label, n, active, attrs) =>
   `<button class="chip" aria-pressed="${active}" ${attrs}>${esc(label)} <span class="n">${n}</span></button>`;
 
-function setFilter(cat, sub = '') {
-  state.cat = cat;
-  state.sub = sub;
+function syncUrl() {
   const p = new URLSearchParams();
-  if (cat) p.set('cat', cat);
-  if (sub) p.set('sub', sub);
+  if (state.q) p.set('q', state.q);
+  if (state.cat) p.set('cat', state.cat);
+  if (state.cat && state.sub) p.set('sub', state.sub);
+  if (state.sort !== 'drop') p.set('sort', state.sort);
+  if (state.deals) p.set('deals', '1');
   history.replaceState(null, '', p.size ? `/?${p}` : '/');
-  render();
+}
+
+function renderChips() {
+  const cats = data.categories;
+  const total = cats.reduce((n, c) => n + c.count, 0);
+  $('#cats').innerHTML = cats.length > 1 || state.cat
+    ? chip('Todas', total, !state.cat, 'data-cat=""') +
+      cats.map((c) => chip(c.name, c.count, state.cat === c.name, `data-cat="${esc(c.name)}"`)).join('')
+    : '';
+  const cur = cats.find((c) => c.name === state.cat);
+  $('#subs').innerHTML = cur && cur.subcategories.length > 1
+    ? chip(`Toda ${cur.name}`, cur.count, !state.sub, 'data-sub=""') +
+      cur.subcategories.map((s) => chip(s.name, s.count, state.sub === s.name, `data-sub="${esc(s.name)}"`)).join('')
+    : '';
 }
 
 function render() {
-  const catOf = (p) => p.category || NONE;
-  const cats = count(products, catOf);
-  // Si la categoría del enlace ya no existe, no dejamos la portada vacía.
-  if (state.cat && !cats.some(([c]) => c === state.cat)) state.cat = state.sub = '';
+  renderChips();
+  $('#title').textContent = state.deals ? '🔥 Ofertas' : 'Productos seguidos';
+  $('#sort').value = state.sort;
+  $('#deals-only').checked = state.deals;
+  if (document.activeElement !== $('#q')) $('#q').value = state.q;
 
-  $('#cats').innerHTML = cats.length > 1 || state.cat
-    ? chip('Todas', products.length, !state.cat, 'data-cat=""') +
-      cats.map(([c, n]) => chip(c, n, state.cat === c, `data-cat="${esc(c)}"`)).join('')
+  const { total } = data;
+  $('#count').textContent = total
+    ? `${total} producto${total === 1 ? '' : 's'}${state.deals ? ' en oferta (bajada en los últimos 7 días)' : ''}`
     : '';
-
-  const inCat = state.cat ? products.filter((p) => catOf(p) === state.cat) : products;
-  const subOf = (p) => p.subcategory || NONE;
-  const subs = state.cat ? count(inCat, subOf) : [];
-  if (state.sub && !subs.some(([s]) => s === state.sub)) state.sub = '';
-  $('#subs').innerHTML = subs.length > 1
-    ? chip(`Toda ${state.cat}`, inCat.length, !state.sub, 'data-sub=""') +
-      subs.map(([s, n]) => chip(s, n, state.sub === s, `data-sub="${esc(s)}"`)).join('')
-    : '';
-
-  const shown = state.sub ? inCat.filter((p) => subOf(p) === state.sub) : inCat;
-
-  const deals = shown.filter((p) => p.isDeal);
-  $('#deals').innerHTML = deals.length
-    ? deals.map(card).join('')
-    : empty('Ninguna oferta por ahora. Vuelve mañana, los precios se revisan cada día.');
-
-  const rest = shown.filter((p) => !p.isDeal);
-  if (!rest.length) {
-    $('#all').innerHTML = `<div class="grid">${empty(
-      products.length
-        ? 'Todos los productos están en oferta 🎉'
-        : 'Aún no hay productos. Instala la extensión de Chrome y pulsa «Seguir precio» en una página de El Corte Inglés.',
-    )}</div>`;
-    return;
+  if (!items.length) {
+    const msg = state.deals
+      ? 'Ninguna oferta con estos filtros. Los precios se revisan cada día.'
+      : state.q || state.cat
+        ? 'Ningún producto coincide con estos filtros.'
+        : 'Aún no hay productos. Pega arriba la URL de uno de El Corte Inglés o usa la extensión de Chrome.';
+    $('#list').innerHTML = empty(msg);
+  } else {
+    $('#list').innerHTML = items.map(card).join('');
   }
-  // Agrupado por categoría; si ya hay una elegida, por subcategoría.
-  const groupOf = state.cat ? subOf : catOf;
-  const groups = new Map();
-  for (const p of rest) {
-    const g = groupOf(p);
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(p);
+  $('#more').hidden = items.length >= total;
+  $('#more').textContent = `Cargar más (${total - items.length} restantes)`;
+}
+
+async function load({ append = false } = {}) {
+  const id = ++loadId;
+  page = append ? page + 1 : 1;
+  const params = new URLSearchParams({ sort: state.sort, page, limit: PAGE_SIZE });
+  if (state.q) params.set('q', state.q);
+  if (state.cat) params.set('cat', state.cat);
+  if (state.cat && state.sub) params.set('sub', state.sub);
+  if (state.deals) params.set('deals', '1');
+  $('#list').setAttribute('aria-busy', 'true');
+  try {
+    const res = await api('/api/products?' + params);
+    if (id !== loadId) return; // llegó otra petición después
+    // Si la categoría del enlace ya no existe, no dejamos la portada vacía.
+    if (state.cat && !append && !res.categories.some((c) => c.name === state.cat)) {
+      state.cat = state.sub = '';
+      syncUrl();
+      return load();
+    }
+    data = res;
+    items = append ? [...items, ...res.products] : res.products;
+    render();
+  } catch (e) {
+    if (id !== loadId) return;
+    $('#list').innerHTML = empty(esc(e.message));
+    $('#more').hidden = true;
+  } finally {
+    if (id === loadId) $('#list').removeAttribute('aria-busy');
   }
-  const names = [...groups.keys()].sort((a, b) =>
-    a === NONE ? 1 : b === NONE ? -1 : groups.get(b).length - groups.get(a).length || a.localeCompare(b, 'es'),
-  );
-  $('#all').innerHTML = names
-    .map((g) => `<section class="group"><h3>${esc(g)} <span class="n">${groups.get(g).length}</span></h3>
-      <div class="grid">${groups.get(g).map(card).join('')}</div></section>`)
-    .join('');
+}
+
+function setFilter(patch) {
+  Object.assign(state, patch);
+  syncUrl();
+  load();
 }
 
 $('#cats').addEventListener('click', (e) => {
   const b = e.target.closest('[data-cat]');
-  if (b) setFilter(b.dataset.cat);
+  if (b) setFilter({ cat: b.dataset.cat, sub: '' });
 });
 $('#subs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sub]');
-  if (b) setFilter(state.cat, b.dataset.sub);
+  if (b) setFilter({ sub: b.dataset.sub });
 });
-
-async function load() {
-  const q = $('#q').value.trim();
-  ({ products } = await api('/api/products?' + new URLSearchParams({ q })));
-  render();
-}
+$('#sort').addEventListener('change', (e) => setFilter({ sort: e.target.value }));
+$('#deals-only').addEventListener('change', (e) => setFilter({ deals: e.target.checked }));
+$('#more').addEventListener('click', () => load({ append: true }));
 
 let t;
-$('#q').addEventListener('input', () => {
+$('#q').addEventListener('input', (e) => {
   clearTimeout(t);
-  t = setTimeout(load, 250);
+  t = setTimeout(() => setFilter({ q: e.target.value.trim().slice(0, 100) }), 250);
 });
-load().catch((e) => ($('#all').innerHTML = `<div class="grid">${empty(esc(e.message))}</div>`));
+
+// --- Añadir producto pegando la URL (mismo POST /api/products que usa la extensión)
+const ECI_HOSTS = ['www.elcorteingles.es', 'elcorteingles.es'];
+function validateEciUrl(raw) {
+  let u;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return 'Eso no parece una URL. Copia la dirección completa de la página del producto.';
+  }
+  if (!['https:', 'http:'].includes(u.protocol) || !ECI_HOSTS.includes(u.hostname)) {
+    return 'La URL debe ser de elcorteingles.es.';
+  }
+  if (!/\/A\d{6,}(?:-\d{6,})?(?=-|\/|$)/.test(u.pathname)) {
+    return 'Esa página no parece la de un producto concreto (falta su referencia «A…»). Abre el producto y copia su URL.';
+  }
+  return '';
+}
+
+function setAddMsg(html, kind = '') {
+  const m = $('#add-msg');
+  m.className = 'msg ' + kind;
+  m.innerHTML = html;
+}
+
+$('#add').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $('#add-url');
+  const btn = $('#add-btn');
+  const err = validateEciUrl(input.value);
+  if (err) {
+    input.setAttribute('aria-invalid', 'true');
+    return setAddMsg(esc(err), 'err');
+  }
+  input.removeAttribute('aria-invalid');
+  btn.disabled = true;
+  btn.textContent = 'Añadiendo…';
+  setAddMsg('Añadiendo el producto…');
+  try {
+    const res = await api('/api/products', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: input.value.trim() }),
+    });
+    const link = `/p/${encodeURIComponent(res.product.id)}`;
+    setAddMsg(
+      res.created
+        ? `✓ Producto añadido. Su precio se consultará en unos segundos. <a href="${link}">Ver ficha</a>`
+        : `Este producto ya se estaba siguiendo. <a href="${link}">Ver ficha</a>`,
+      'ok',
+    );
+    input.value = '';
+    load();
+  } catch (e2) {
+    setAddMsg(esc(e2.message || 'No se pudo añadir el producto'), 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Seguir precio';
+  }
+});
+
+load();

@@ -100,3 +100,36 @@ form.sub input { flex: 1; min-width: 200px; }
 .msg.ok { color: var(--good); }
 .msg.err { color: var(--bad); }
 .down { color: var(--good); font-weight: 600; }
+
+/* portada: alta por URL, barra de orden, sparkline */
+.add { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; }
+.add-label { display: block; font-weight: 600; margin-bottom: 8px; }
+.add-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.add-row input { flex: 1; min-width: 220px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.add-row input[aria-invalid='true'] { border-color: var(--bad); }
+.add .msg { margin: 8px 0 0; }
+.add .msg:empty { display: none; }
+button:disabled { opacity: .6; cursor: progress; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; margin-bottom: 4px; }
+.toolbar h1 { margin: 0; }
+.controls { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
+.controls label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.controls select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+.count { margin: 4px 0 14px; font-size: 14px; min-height: 1.5em; }
+.more { display: flex; justify-content: center; margin-top: 24px; }
+#more[hidden] { display: none; }
+.small { font-size: 12px; }
+.spark-row { display: flex; align-items: center; gap: 8px; min-height: 28px; margin-top: auto; }
+.spark { width: 100%; max-width: 160px; height: 28px; flex: 1; }
+.spark.down { color: var(--good); }
+.spark.up { color: var(--bad); }
+.spark.flat { color: var(--muted); }
+.min-tag { font-size: 11px; font-weight: 600; color: var(--good); border: 1px solid var(--good); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+@media (max-width: 520px) {
+  h1 { font-size: 26px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .card { padding: 8px; }
+  .price { font-size: 17px; }
+  .badge { top: 12px; left: 12px; }
+}
