@@ -89,6 +89,12 @@ export const enqueueDropAlerts = (db, product, oldPrice, newPrice) =>
 
 /** Email de doble opt-in: la alerta no se activa hasta pulsar el enlace. */
 export function enqueueConfirmation(db, product, email, confirmToken, targetPrice) {
+  // Tope por dirección en ventana móvil de 24 h (todos los productos); pasado el tope no se encola.
+  const since = new Date(Date.now() - 864e5).toISOString();
+  const sentToday = db
+    .prepare(`SELECT COUNT(*) AS n FROM email_queue WHERE to_email = ? AND subject LIKE 'Confirma tu alerta:%' AND created_at > ?`)
+    .get(email, since).n;
+  if (sentToday >= config.confirmMaxPerEmailDay) return false;
   const name = product.name || product.id;
   const url = confirmUrl(confirmToken);
   const goal = targetPrice != null ? ` Te avisaremos cuando baje a ${eur(targetPrice)} o menos.` : ' Te avisaremos cuando baje de precio.';
@@ -104,6 +110,7 @@ export function enqueueConfirmation(db, product, email, confirmToken, targetPric
       null,
     ),
   });
+  return true;
 }
 
 /** Aviso tras confirmar (la alerta ya está activa). */

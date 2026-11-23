@@ -178,3 +178,22 @@ test('GET de confirmar/baja sólo muestra una página; el POST cambia el estado'
   assert.equal(db.prepare('SELECT COUNT(*) n FROM subscriptions').get().n, 0);
   await app.close();
 });
+
+test('tope diario de emails de confirmación por dirección (todos los productos) con respuesta idéntica', async () => {
+  const db = openDb(':memory:');
+  const app = await buildApp({ db, serveStatic: false });
+  const ids = [];
+  for (let i = 0; i < 7; i++) {
+    const id = `A10000000${i}-2222222222`;
+    upsertProduct(db, { ...P, id, url: P.url.replace('A111111111-2222222222', id) });
+    ids.push(id);
+  }
+  const res = [];
+  for (const id of ids) res.push(await app.inject({ method: 'POST', url: `/api/products/${id}/subscribe`, payload: { email: 'v@x.com' } }));
+  assert.ok(res.every((r) => r.statusCode === 200 && r.body === res[0].body));
+  assert.equal(mails(db).filter((m) => m.to_email === 'v@x.com').length, 5);
+  // otra dirección no se ve afectada
+  await app.inject({ method: 'POST', url: `/api/products/${ids[0]}/subscribe`, payload: { email: 'w@x.com' } });
+  assert.equal(mails(db).filter((m) => m.to_email === 'w@x.com').length, 1);
+  await app.close();
+});

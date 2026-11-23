@@ -28,6 +28,7 @@ export const config = {
   mailDryRun: bool(env.MAIL_DRY_RUN),
   mailDelayMs: Number(env.MAIL_DELAY_MS) || 1000,
   // Alertas: caducidad de suscripciones sin confirmar y purga de email_queue.
+  confirmMaxPerEmailDay: Number(env.CONFIRM_MAX_PER_EMAIL_DAY) || 5,
   confirmTtlDays: Number(env.CONFIRM_TTL_DAYS) || 7,
   queueSentRetentionDays: Number(env.QUEUE_SENT_RETENTION_DAYS) || 30,
   queueFailedRetentionDays: Number(env.QUEUE_FAILED_RETENTION_DAYS) || 60,
