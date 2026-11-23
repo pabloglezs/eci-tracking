@@ -28,8 +28,20 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-ECI Tracker <no-reply@localhost>}
       MAIL_DRY_RUN: ${MAIL_DRY_RUN:-false}
+      # Backups de la BD (VACUUM INTO). BACKUP_CRON=off los desactiva.
+      BACKUP_CRON: ${BACKUP_CRON:-30 3 * * *}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+      # Límites por IP de POST /api/products (por minuto, por día y productos nuevos por día).
+      TRACK_PER_MINUTE: ${TRACK_PER_MINUTE:-30}
+      TRACK_PER_DAY: ${TRACK_PER_DAY:-200}
+      TRACK_NEW_PER_DAY: ${TRACK_NEW_PER_DAY:-30}
     volumes:
       - eci-data:/data
+      # Volumen aparte para los backups: si se pierde/corrompe eci-data siguen ahí.
+      # Para protegerte de perder el disco, pon BACKUP_PATH a una ruta del host en
+      # OTRO disco (p. ej. BACKUP_PATH=/mnt/nas/eci-backups) y será un bind mount.
+      - ${BACKUP_PATH:-eci-backups}:/data/backups
 
 volumes:
   eci-data:
+  eci-backups:
