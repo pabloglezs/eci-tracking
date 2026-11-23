@@ -4,6 +4,7 @@ import { openDb } from './db.js';
 import { buildApp } from './app.js';
 import { runDailyCheck } from './checker.js';
 import { startMailWorker } from './mailer.js';
+import { startBackups } from './backup.js';
 
 const db = openDb(config.dbPath);
 const app = await buildApp({ db, logger: true });
@@ -12,6 +13,7 @@ cron.schedule(config.checkCron, () => runDailyCheck(db).catch((e) => console.err
   timezone: config.timezone,
 });
 startMailWorker(db);
+startBackups(db);
 
 if (config.checkOnStart) runDailyCheck(db).catch((e) => console.error('[check]', e));
 

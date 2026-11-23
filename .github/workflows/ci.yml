@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Servidor (tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - run: npm test
+        working-directory: server
+
+  extension:
+    name: Extensión (sintaxis y manifest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: node --check de los JS
+        run: |
+          set -e
+          find extension -name '*.js' -not -path '*/node_modules/*' -print0 | while IFS= read -r -d '' f; do
+            echo "check $f"; node --check "$f"
+          done
+      - name: manifest.json válido
+        run: node -e "const m=JSON.parse(require('fs').readFileSync('extension/manifest.json','utf8')); if(m.manifest_version!==3) throw new Error('manifest_version != 3'); console.log(m.name, m.version)"
+
+  docker:
+    name: Imagen Docker (sin push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: eci-tracking:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

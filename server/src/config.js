@@ -26,5 +26,15 @@ export const config = {
   mailFrom: env.MAIL_FROM || 'ECI Tracker <no-reply@localhost>',
   // Sin SMTP, los emails se quedan en cola; con MAIL_DRY_RUN se escriben en el log.
   mailDryRun: bool(env.MAIL_DRY_RUN),
+  // Backups de la BD (VACUUM INTO). BACKUP_CRON=off los desactiva.
+  backupCron: env.BACKUP_CRON ?? '30 3 * * *',
+  backupDir: env.BACKUP_DIR || '/data/backups',
+  backupKeep: Number(env.BACKUP_KEEP) || 7,
+  // Endurecimiento de POST /api/products (por IP).
+  trackPerMinute: Number(env.TRACK_PER_MINUTE) || 30,
+  trackPerDay: Number(env.TRACK_PER_DAY) || 200,
+  trackNewPerDay: Number(env.TRACK_NEW_PER_DAY) || 30,
+  // Límite por minuto de las rutas de suscripción.
+  subscribePerMinute: Number(env.SUBSCRIBE_PER_MINUTE) || 10,
   mailDelayMs: Number(env.MAIL_DELAY_MS) || 1000,
 };

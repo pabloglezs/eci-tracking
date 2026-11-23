@@ -44,6 +44,61 @@ export function clientIp(req, trustProxy = config.trustProxy) {
   return (trustProxy && typeof cf === 'string' && cf.trim()) || req.ip;
 }
 
+// Cabeceras de seguridad. La web sólo carga recursos propios e imágenes de ECI.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'", // hay atributos style= en el HTML
+  "img-src 'self' data: https://*.elcorteingles.es",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+const SECURITY_HEADERS = {
+  'content-security-policy': CSP,
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+  'strict-transport-security': 'max-age=15552000',
+};
+
+// POST /api/products: campos aceptados y su tipo.
+const TRACK_FIELDS = { url: 'string', name: 'string', image: 'string', price: 'number' };
+const TRACK_MAX_LEN = { url: 600, name: 1000, image: 1000 };
+
+/** Devuelve un mensaje de error si el cuerpo no es válido, o null. */
+export function validateTrackBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return 'Cuerpo no válido';
+  for (const [k, v] of Object.entries(body)) {
+    if (!(k in TRACK_FIELDS)) return `Campo no permitido: ${k.slice(0, 40)}`;
+    if (v === null || v === undefined) continue;
+    if (typeof v !== TRACK_FIELDS[k]) return `Tipo no válido en ${k}`;
+    if (typeof v === 'string' && v.length > TRACK_MAX_LEN[k]) return `${k} demasiado largo`;
+  }
+  if (typeof body.url !== 'string' || !body.url.trim()) return 'Falta la url';
+  return null;
+}
+
+/** Contador diario en memoria por IP (se reinicia al cambiar de día o al reiniciar). */
+function dailyCounter(tz) {
+  let day = '';
+  const m = new Map();
+  return {
+    get: (key) => {
+      const d = today(tz);
+      if (d !== day) {
+        day = d;
+        m.clear();
+      }
+      return m.get(key) ?? 0;
+    },
+    inc: (key) => m.set(key, (m.get(key) ?? 0) + 1),
+  };
+}
+
 const limit = (max) => ({ config: { rateLimit: { max, timeWindow: '1 minute' } } });
 
 export async function buildApp({ db, logger = false, serveStatic = true }) {
@@ -52,6 +107,13 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
   // CORS abierto: la extensión de Chrome llama a la API desde otro origen.
   await app.register(cors, { origin: true });
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute', keyGenerator: (req) => clientIp(req) });
+
+  app.addHook('onSend', async (req, reply, payload) => {
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!reply.hasHeader(k)) reply.header(k, v);
+    return payload;
+  });
+  const trackReqs = dailyCounter(config.timezone);
+  const trackNew = dailyCounter(config.timezone);
 
   app.get('/api/health', async () => ({ ok: true }));
 
@@ -94,11 +156,21 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
   });
 
   // Alta de producto (la usa la extensión de Chrome).
-  app.post('/api/products', limit(30), async (req, reply) => {
-    const body = req.body ?? {};
+  app.post('/api/products', { ...limit(config.trackPerMinute), bodyLimit: 8192 }, async (req, reply) => {
+    const ip = clientIp(req);
+    if (trackReqs.get(ip) >= config.trackPerDay) {
+      return reply.code(429).send({ error: 'Has superado el límite diario de peticiones' });
+    }
+    trackReqs.inc(ip);
+    const invalid = validateTrackBody(req.body);
+    if (invalid) return reply.code(400).send({ error: invalid });
+    const body = req.body;
     const parsed = parseProductUrl(body.url);
     if (!parsed) return reply.code(400).send({ error: 'La URL no es un producto de El Corte Inglés' });
 
+    if (!getProduct(db, parsed.id) && trackNew.get(ip) >= config.trackNewPerDay) {
+      return reply.code(429).send({ error: 'Has superado el límite diario de productos nuevos' });
+    }
     const { product, created } = upsertProduct(db, {
       ...parsed,
       name: sanitizeName(body.name),
@@ -109,7 +181,10 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
     if (isValidPrice(body.price) && !hasPrices(db, product.id)) {
       recordPrice(db, product.id, body.price, config.timezone);
     }
-    if (created) checkSoon(db, product);
+    if (created) {
+      trackNew.inc(ip);
+      checkSoon(db, product);
+    }
     return reply.code(created ? 201 : 200).send({ created, product: { id: product.id, name: product.name } });
   });
 
@@ -125,7 +200,7 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
     return { tracked: rows.map((r) => r.id) };
   });
 
-  app.post('/api/products/:id/subscribe', limit(10), async (req, reply) => {
+  app.post('/api/products/:id/subscribe', limit(config.subscribePerMinute), async (req, reply) => {
     const product = getProduct(db, req.params.id);
     if (!product) return reply.code(404).send({ error: 'Producto no encontrado' });
     const email = String(req.body?.email ?? '').trim().toLowerCase();

@@ -11,7 +11,7 @@ RUN npm ci --omit=dev
 COPY server/ ./
 
 # La base de datos SQLite vive en /data (volumen).
-RUN mkdir -p /data && chown node:node /data
+RUN mkdir -p /data/backups && chown -R node:node /data
 VOLUME /data
 USER node
 
