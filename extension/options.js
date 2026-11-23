@@ -16,7 +16,7 @@ document.getElementById('save').addEventListener('click', async () => {
   }
   await ext.storage.sync.set({ apiUrl: url });
   try {
-    const res = await fetch(`${url}/api/health`);
+    const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(6000) });
     status.textContent = res.ok ? '✓ Guardado y servidor accesible' : `Guardado, pero el servidor respondió ${res.status}`;
   } catch {
     status.textContent = 'Guardado, pero no se pudo conectar con el servidor.';

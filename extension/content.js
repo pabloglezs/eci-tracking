@@ -83,7 +83,7 @@
       box-shadow: 0 4px 14px rgba(0,0,0,.25);
     }
     button:disabled { opacity: .7; cursor: wait; }
-    .ok { background: #0a7d3b; }
+    .ok, a.btn.ok { background: #0a7d3b; }
     .err { background: #fff; color: #b3261e; border: 1px solid #b3261e; border-radius: 12px; padding: 10px 14px;
       max-width: 280px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
     .card { background: #fff; color: #1a1a1a; border-radius: 14px; padding: 12px 14px; min-width: 220px;
