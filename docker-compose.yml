@@ -1,7 +1,9 @@
 services:
   app:
+    # Sólo `build`, sin `image`: si hubiera `image`, la actualización automática de Portainer
+    # (que ejecuta `docker compose pull` antes de desplegar) intentaría bajar esa imagen de
+    # Docker Hub, donde no existe, y fallaría con «pull access denied».
     build: .
-    image: eci-tracking:latest
     container_name: eci-tracking
     restart: unless-stopped
     ports:
