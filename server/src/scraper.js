@@ -51,9 +51,22 @@ function offerPrice(offers) {
   return null;
 }
 
-/** Extrae {name, image, price} del HTML de una página de producto. */
+const isBreadcrumb = (n) => [].concat(n['@type'] ?? []).includes('BreadcrumbList');
+
+/** Nombres del breadcrumb en orden, sin el "Inicio" inicial. */
+function breadcrumbNames(node) {
+  return [].concat(node.itemListElement ?? [])
+    .map((i) => ({ pos: Number(i?.position) || 0, name: decode(i?.item?.name ?? i?.name) }))
+    .filter((i) => typeof i.name === 'string' && i.name.trim() && !/^(inicio|home)$/i.test(i.name.trim()))
+    .sort((a, b) => a.pos - b.pos)
+    .map((i) => i.name.trim());
+}
+
+/** Extrae {name, image, price, categories} del HTML de una página de producto. */
 export function parseProductHtml(html) {
   const blocks = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  let product = null;
+  let categories = [];
   for (const b of blocks) {
     let json;
     try {
@@ -62,23 +75,27 @@ export function parseProductHtml(html) {
       continue;
     }
     for (const node of walk(json)) {
-      if (!isProduct(node)) continue;
-      const price = offerPrice(node.offers);
-      if (!price) continue;
-      const img = [].concat(node.image ?? [])[0];
-      return {
-        name: decode(node.name) || null,
-        image: typeof img === 'string' ? img : (img?.url ?? null),
-        price,
-      };
+      if (!product && isProduct(node)) {
+        const price = offerPrice(node.offers);
+        if (!price) continue;
+        const img = [].concat(node.image ?? [])[0];
+        product = {
+          name: decode(node.name) || null,
+          image: typeof img === 'string' ? img : (img?.url ?? null),
+          price,
+        };
+      } else if (!categories.length && isBreadcrumb(node)) {
+        categories = breadcrumbNames(node);
+      }
     }
   }
+  if (product) return { ...product, categories };
   // Plan B: microdatos / meta tags.
   const meta = html.match(/<meta[^>]+itemprop=["']price["'][^>]+content=["']([^"']+)["']/i);
   const price = parsePrice(meta?.[1]);
   if (price) {
     const og = (p) => html.match(new RegExp(`<meta[^>]+property=["']og:${p}["'][^>]+content=["']([^"']*)["']`, 'i'))?.[1];
-    return { name: decode(og('title')) || null, image: og('image') || null, price };
+    return { name: decode(og('title')) || null, image: og('image') || null, price, categories };
   }
   throw new ScrapeError('No se encontró el precio en la página');
 }

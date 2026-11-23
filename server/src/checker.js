@@ -10,10 +10,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function checkProduct(db, product, { scrape = fetchProduct, tz = config.timezone } = {}) {
   try {
     const data = await scrape(product.url);
+    const cats = data.categories ?? [];
     db.prepare(
       `UPDATE products SET last_checked_at = ?, last_error = NULL, fail_count = 0,
-         name = COALESCE(NULLIF(name, ''), ?), image = COALESCE(NULLIF(image, ''), ?) WHERE id = ?`,
-    ).run(new Date().toISOString(), data.name ?? null, data.image ?? null, product.id);
+         name = COALESCE(NULLIF(name, ''), ?), image = COALESCE(NULLIF(image, ''), ?),
+         category = COALESCE(?, category), subcategory = COALESCE(?, subcategory),
+         category_path = COALESCE(?, category_path) WHERE id = ?`,
+    ).run(
+      new Date().toISOString(),
+      data.name ?? null,
+      data.image ?? null,
+      cats[0] ?? null,
+      cats[1] ?? null,
+      cats.length ? cats.join(' › ') : null,
+      product.id,
+    );
     const r = recordPrice(db, product.id, data.price, tz);
     if (r.dropped) {
       const fresh = db.prepare('SELECT * FROM products WHERE id = ?').get(product.id);

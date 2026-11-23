@@ -23,6 +23,7 @@ Dockerfile · docker-compose.yml
 - **Scraper**: descarga la página del producto con cabeceras de navegador (sin ellas ECI responde 403) y lee el precio del JSON-LD `Product` (`offers.price`).
 - **Un precio por producto y día** (`prices`, clave `product_id + day`, en la zona horaria `TZ`).
 - **Oferta** = precio que ha bajado en los últimos 7 días y no ha vuelto a subir.
+- **Categorías**: se leen del `BreadcrumbList` JSON-LD de la ficha (p. ej. Electrónica › Móviles y Smartphones › Móviles 5G). Nivel 1 = categoría, nivel 2 = subcategoría; la portada las agrupa y filtra (`/?cat=…&sub=…`). Se rellenan en la primera comprobación del scraper y se refrescan en cada pasada diaria.
 - **Alertas**: al registrar el precio del día, si es menor que el último día anterior registrado se insertan los emails en `email_queue`; un worker los envía cada 30 s (lotes de 20, 1 s entre emails, 5 reintentos).
 - **ID de producto**: sale de la URL, p. ej. `A202047813-8806097827146`. Cada variante (color, talla…) es un producto distinto.
 

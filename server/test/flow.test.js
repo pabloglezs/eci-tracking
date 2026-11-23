@@ -46,6 +46,22 @@ test('bajada de precio => cola de emails => envío a todos los suscriptores', as
   assert.equal(db.prepare(`SELECT COUNT(*) n FROM email_queue WHERE status='sent'`).get().n, 2);
 });
 
+test('checkProduct guarda categoría/subcategoría y las conserva si luego no vienen', async () => {
+  const db = openDb(':memory:');
+  const { product } = upsertProduct(db, P);
+  const cats = ['Electrónica', 'Móviles', 'Móviles 5G'];
+  await checkProduct(db, product, { scrape: async () => ({ price: 10, categories: cats }), tz: TZ });
+  let row = db.prepare('SELECT category, subcategory, category_path FROM products').get();
+  assert.deepEqual({ ...row }, { category: 'Electrónica', subcategory: 'Móviles', category_path: 'Electrónica › Móviles › Móviles 5G' });
+  await checkProduct(db, product, { scrape: async () => ({ price: 10, categories: [] }), tz: TZ });
+  assert.equal(db.prepare('SELECT category FROM products').get().category, 'Electrónica');
+  const app = await buildApp({ db, serveStatic: false });
+  const list = (await app.inject({ url: '/api/products' })).json().products;
+  assert.equal(list[0].category, 'Electrónica');
+  assert.equal(list[0].subcategory, 'Móviles');
+  await app.close();
+});
+
 test('un fallo de envío reintenta y acaba en failed', async () => {
   const db = openDb(':memory:');
   upsertProduct(db, P);

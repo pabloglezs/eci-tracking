@@ -53,6 +53,11 @@ export function openDb(path) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  // Migración: columnas de categoría añadidas después de la v0.1.
+  const cols = db.prepare('PRAGMA table_info(products)').all().map((c) => c.name);
+  for (const c of ['category', 'subcategory', 'category_path']) {
+    if (!cols.includes(c)) db.exec(`ALTER TABLE products ADD COLUMN ${c} TEXT`);
+  }
   return db;
 }
 

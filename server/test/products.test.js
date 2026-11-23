@@ -56,7 +56,24 @@ test('parseProductHtml lee JSON-LD de Product', () => {
     name: 'Móvil "X"',
     image: 'https://dam.elcorteingles.es/a.jpg',
     price: 2149,
+    categories: [],
   });
+});
+
+test('parseProductHtml lee las categorías del BreadcrumbList (otro bloque, desordenadas)', () => {
+  const crumbs = {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 3, item: { '@id': 'x', name: 'Móviles 5G' } },
+      { '@type': 'ListItem', position: 0, item: { name: 'Inicio' } },
+      { '@type': 'ListItem', position: 1, item: { '@id': 'y', name: 'Electr&amp;ónica' } },
+      { '@type': 'ListItem', position: 2, item: { '@id': 'z', name: 'Móviles y Smartphones' } },
+    ],
+  };
+  const prod = { '@type': 'Product', name: 'P', offers: { price: 10 } };
+  const wrap = (o) => `<script type="application/ld+json">${JSON.stringify(o)}</script>`;
+  const r = parseProductHtml(wrap(crumbs) + wrap(prod));
+  assert.deepEqual(r.categories, ['Electr&ónica', 'Móviles y Smartphones', 'Móviles 5G']);
 });
 
 test('parseProductHtml soporta @graph, precio string y falla sin precio', () => {

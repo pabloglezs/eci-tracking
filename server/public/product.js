@@ -52,6 +52,15 @@ function draw() {
   });
 }
 
+/** Migas de pan: cada nivel enlaza a la portada filtrada por esa categoría. */
+function crumbs(p) {
+  if (!p.category) return '';
+  const q = (o) => '/?' + new URLSearchParams(o);
+  const parts = [`<a href="${esc(q({ cat: p.category }))}">${esc(p.category)}</a>`];
+  if (p.subcategory) parts.push(`<a href="${esc(q({ cat: p.category, sub: p.subcategory }))}">${esc(p.subcategory)}</a>`);
+  return `<p class="crumbs">${parts.join(' › ')}</p>`;
+}
+
 function render() {
   const { product: p, stats: s, deal, subscribers } = data;
   document.title = `${p.name || p.id} · ECI Tracker`;
@@ -71,6 +80,7 @@ function render() {
   root.innerHTML = `
     <div class="product-head">${img}
       <div class="info">
+        ${crumbs(p)}
         <h1 style="margin-bottom:6px">${esc(p.name || p.id)}</h1>
         <div class="price" style="font-size:28px">${eur(s.current)}</div>
         <div>${dealTxt}${atMin}</div>

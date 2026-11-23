@@ -76,6 +76,8 @@ export function listProducts(db, { q = '', dealsOnly = false, tz }) {
       url: p.url,
       name: p.name,
       image: p.image,
+      category: p.category,
+      subcategory: p.subcategory,
       createdAt: p.created_at,
       lastCheckedAt: p.last_checked_at,
       price: stats?.current ?? null,

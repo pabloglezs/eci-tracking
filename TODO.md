@@ -25,7 +25,8 @@
 ## Producto
 - [ ] Alerta por **precio objetivo** («avísame si baja de X €») además de «baja respecto a ayer»
 - [ ] Sparkline en las tarjetas de la home
-- [ ] Ordenar/filtrar listado (mayor bajada, mínimo histórico, categoría)
+- [x] Categorías (del breadcrumb de ECI): chips, subcategorías y agrupación en la portada
+- [ ] Ordenar el listado (mayor bajada, mínimo histórico)
 - [ ] Paginación (el listado carga todo; hay que paginar y optimizar la query cuando haya miles de productos)
 - [ ] Añadir producto pegando la URL desde la web (sin extensión)
 - [x] Popup en el icono de la extensión (seguir producto de la pestaña activa)
