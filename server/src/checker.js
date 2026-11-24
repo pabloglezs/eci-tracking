@@ -124,9 +124,30 @@ export async function runDailyCheck(db, { scrape, tz = config.timezone, delay = 
 
 // Cola serie para las comprobaciones inmediatas de productos recién añadidos.
 let chain = Promise.resolve();
-export function checkSoon(db, product) {
+let pendingChecks = 0;
+
+/** Nº de comprobaciones inmediatas en cola o en curso (lo usa la alta masiva para no desbordar la cola). */
+export const pendingCheckCount = () => pendingChecks;
+
+export function checkSoon(db, product, { scrape } = {}) {
+  pendingChecks++;
   chain = chain
-    .then(() => checkProduct(db, product))
+    .then(() => checkProduct(db, product, scrape ? { scrape } : undefined))
     .then(() => sleep(config.requestDelayMs[0]))
-    .catch((e) => console.error('[check]', e));
+    .catch((e) => console.error('[check]', e))
+    .finally(() => {
+      pendingChecks--;
+    });
+}
+
+/** Al arrancar: encola los productos que nunca han tenido precio (p. ej. cola perdida en un reinicio). */
+export function sweepUnpriced(db, opts) {
+  const rows = db
+    .prepare(
+      `SELECT * FROM products p WHERE COALESCE(status, 'active') != 'gone'
+         AND NOT EXISTS (SELECT 1 FROM prices WHERE product_id = p.id) ORDER BY created_at`,
+    )
+    .all();
+  for (const p of rows) checkSoon(db, p, opts);
+  return rows.length;
 }

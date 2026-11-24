@@ -35,6 +35,11 @@ export const config = {
   trackPerDay: Number(env.TRACK_PER_DAY) || 200,
   // Productos NUEVOS por IP y día. 0 (por defecto) = sin límite.
   trackNewPerDay: Number(env.TRACK_NEW_PER_DAY) || 0,
+  // Alta masiva (POST /api/products/bulk).
+  bulkMaxItems: Number(env.BULK_MAX_ITEMS) || 100,
+  bulkPerMinute: Number(env.BULK_PER_MINUTE) || 5,
+  // Máximo de comprobaciones inmediatas pendientes en la cola de ECI (checkSoon).
+  scrapeQueueMax: Number(env.SCRAPE_QUEUE_MAX) || 300,
   // Límite por minuto de las rutas de suscripción.
   subscribePerMinute: Number(env.SUBSCRIBE_PER_MINUTE) || 10,
   mailDelayMs: Number(env.MAIL_DELAY_MS) || 1000,

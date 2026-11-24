@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { config } from './config.js';
 import { openDb } from './db.js';
 import { buildApp } from './app.js';
-import { runDailyCheck } from './checker.js';
+import { runDailyCheck, sweepUnpriced } from './checker.js';
 import { startMailWorker } from './mailer.js';
 import { startBackups } from './backup.js';
 
@@ -15,6 +15,8 @@ cron.schedule(config.checkCron, () => runDailyCheck(db).catch((e) => console.err
 startMailWorker(db);
 startBackups(db);
 
+const swept = sweepUnpriced(db);
+if (swept) console.log(`[check] ${swept} producto(s) sin precio en cola tras el arranque`);
 if (config.checkOnStart) runDailyCheck(db).catch((e) => console.error('[check]', e));
 
 await app.listen({ port: config.port, host: config.host });
