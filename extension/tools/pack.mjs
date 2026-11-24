@@ -19,7 +19,7 @@ const variants = {
     return {
       ...m,
       background: { ...rest, scripts: [service_worker] },
-      browser_specific_settings: { gecko: { id: 'eci-tracker@pabloglezs.es', strict_min_version: '115.0' } },
+      browser_specific_settings: { gecko: { id: 'eci-tracker@selfhosted.invalid', strict_min_version: '115.0' } },
     };
   },
 };

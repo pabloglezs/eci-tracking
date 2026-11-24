@@ -4,6 +4,8 @@
 
 Histórico de precios de **El Corte Inglés**, al estilo camelcamelcamel. Pensado para desplegarse por cuenta propia (self-hosted).
 
+> **Aviso:** proyecto personal y no oficial. **No está afiliado, patrocinado ni respaldado por El Corte Inglés**; «El Corte Inglés» y su logotipo son marcas de sus titulares y aquí sólo se nombran para indicar con qué sitio funciona. No se alojan ni se redistribuyen sus imágenes ni sus contenidos (sólo se guarda la URL de la imagen y el precio). Quien lo despliegue es responsable de su uso y de cumplir las condiciones de uso del sitio y la normativa aplicable (p. ej. RGPD si guarda emails de otras personas). Se ofrece «tal cual», sin garantías (licencia MIT).
+
 1. Instalas la **extensión** (Chrome o Firefox) y, en la ficha de cualquier producto de elcorteingles.es, pulsas **«📉 Seguir precio»**.
 2. El servidor consulta ese producto **una vez al día** y guarda el precio.
 3. En la **web** ves los productos seguidos (arriba, las **ofertas**: los que han bajado de precio), con filtros por categoría, orden y buscador. Cada ficha tiene un **gráfico** con el precio actual, mínimo, máximo y medio.
