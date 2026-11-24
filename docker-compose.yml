@@ -38,6 +38,11 @@ services:
       TRACK_PER_DAY: ${TRACK_PER_DAY:-200}
       # Productos nuevos por IP y día (0 = sin límite).
       TRACK_NEW_PER_DAY: ${TRACK_NEW_PER_DAY:-0}
+      # Alta masiva (POST /api/products/bulk): items por petición, peticiones/min por IP
+      # y máximo de comprobaciones inmediatas pendientes en la cola hacia ECI.
+      BULK_MAX_ITEMS: ${BULK_MAX_ITEMS:-100}
+      BULK_PER_MINUTE: ${BULK_PER_MINUTE:-5}
+      SCRAPE_QUEUE_MAX: ${SCRAPE_QUEUE_MAX:-300}
       SUBSCRIBE_PER_MINUTE: ${SUBSCRIBE_PER_MINUTE:-10}
       # Scraper: pausa entre peticiones a ECI, reintentos y descatalogados.
       REQUEST_DELAY_MIN_MS: ${REQUEST_DELAY_MIN_MS:-2000}

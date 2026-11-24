@@ -30,7 +30,7 @@ import {
   countSubscribers,
 } from './store.js';
 import { today } from './db.js';
-import { checkSoon, runDailyCheck } from './checker.js';
+import { checkSoon, runDailyCheck, pendingCheckCount } from './checker.js';
 import { enqueueWelcome, enqueueConfirmation } from './mailer.js';
 import { registerAdminRoutes } from './adminRoutes.js';
 
@@ -105,7 +105,7 @@ function dailyCounter(tz) {
 
 const limit = (max) => ({ config: { rateLimit: { max, timeWindow: '1 minute' } } });
 
-export async function buildApp({ db, logger = false, serveStatic = true }) {
+export async function buildApp({ db, logger = false, serveStatic = true, scrape }) {
   const app = Fastify({ logger, trustProxy: config.trustProxy });
 
   // CORS abierto: la extensión de Chrome llama a la API desde otro origen.
@@ -166,38 +166,123 @@ export async function buildApp({ db, logger = false, serveStatic = true }) {
     };
   });
 
-  // Alta de producto (la usa la extensión de Chrome).
+  // --- Alta de productos (individual y masiva) ---
+
+  /** Valida un item {url,name,image,price}. Devuelve { error } o { item }. */
+  const prepareTrack = (body) => {
+    const invalid = validateTrackBody(body);
+    if (invalid) return { error: invalid };
+    const parsed = parseProductUrl(body.url);
+    if (!parsed) return { error: 'La URL no es un producto de El Corte Inglés' };
+    return { item: { ...parsed, name: sanitizeName(body.name), image: sanitizeImage(body.image), price: body.price } };
+  };
+
+  const GONE_RECHECK_MS = 864e5;
+  const isRecheckGone = (p) => p.status === 'gone' && Date.parse(p.last_checked_at ?? 0) < Date.now() - GONE_RECHECK_MS;
+
+  /** Da de alta (o rellena) un item ya validado. Lógica común a las dos rutas. `queue` = hay que consultarlo a ECI. */
+  const trackOne = (item) => {
+    const { product, created } = upsertProduct(db, item);
+    // Primer punto de la gráfica con el precio que vio el usuario; el scraper lo
+    // confirma enseguida. Después de eso, sólo se fían los precios del scraper.
+    if (isValidPrice(item.price) && !hasPrices(db, product.id)) {
+      recordPrice(db, product.id, item.price, config.timezone);
+    }
+    // Un producto descatalogado que alguien vuelve a seguir: se re-sondea (máx. 1 vez al día).
+    return { product, created, queue: created || isRecheckGone(product) };
+  };
+
   app.post('/api/products', { ...limit(config.trackPerMinute), bodyLimit: 8192 }, async (req, reply) => {
     const ip = clientIp(req);
     if (trackReqs.get(ip) >= config.trackPerDay) {
       return reply.code(429).send({ error: 'Has superado el límite diario de peticiones' });
     }
     trackReqs.inc(ip);
-    const invalid = validateTrackBody(req.body);
-    if (invalid) return reply.code(400).send({ error: invalid });
-    const body = req.body;
-    const parsed = parseProductUrl(body.url);
-    if (!parsed) return reply.code(400).send({ error: 'La URL no es un producto de El Corte Inglés' });
+    const { error, item } = prepareTrack(req.body);
+    if (error) return reply.code(400).send({ error });
 
-    if (config.trackNewPerDay > 0 && !getProduct(db, parsed.id) && trackNew.get(ip) >= config.trackNewPerDay) {
+    if (config.trackNewPerDay > 0 && !getProduct(db, item.id) && trackNew.get(ip) >= config.trackNewPerDay) {
       return reply.code(429).send({ error: 'Has superado el límite diario de productos nuevos' });
     }
-    const { product, created } = upsertProduct(db, {
-      ...parsed,
-      name: sanitizeName(body.name),
-      image: sanitizeImage(body.image),
-    });
-    // Primer punto de la gráfica con el precio que vio el usuario; el scraper lo
-    // confirma enseguida. Después de eso, sólo se fían los precios del scraper.
-    if (isValidPrice(body.price) && !hasPrices(db, product.id)) {
-      recordPrice(db, product.id, body.price, config.timezone);
-    }
+    const { product, created, queue } = trackOne(item);
     if (created) trackNew.inc(ip);
-    // Un producto descatalogado que alguien vuelve a seguir: se re-sondea (máx. 1 vez al día).
-    const recheckGone =
-      !created && product.status === 'gone' && Date.parse(product.last_checked_at ?? 0) < Date.now() - 864e5;
-    if (created || recheckGone) checkSoon(db, product);
+    if (queue) checkSoon(db, product, { scrape });
     return reply.code(created ? 201 : 200).send({ created, product: { id: product.id, name: product.name } });
+  });
+
+  /**
+   * Alta masiva: { items: [{url,name?,image?,price?}, ...] }. Cada item se valida igual que en el alta
+   * individual y cuenta para los topes diarios por IP (TRACK_PER_DAY y, si es nuevo, TRACK_NEW_PER_DAY).
+   * Criterio de topes: se procesan, en orden, los items válidos que caben; los que no caben quedan
+   * `invalid` con error "Límite diario superado"; si no cabe ninguno válido => 429. Cola de ECI llena
+   * (SCRAPE_QUEUE_MAX) => 429 sin insertar nada (todo o nada).
+   */
+  app.post('/api/products/bulk', { ...limit(config.bulkPerMinute), bodyLimit: 262144 }, async (req, reply) => {
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return reply.code(400).send({ error: 'Cuerpo no válido' });
+    const extra = Object.keys(body).find((k) => k !== 'items');
+    if (extra) return reply.code(400).send({ error: `Campo no permitido: ${extra.slice(0, 40)}` });
+    if (!Array.isArray(body.items) || !body.items.length) return reply.code(400).send({ error: 'Falta la lista de productos (items)' });
+    if (body.items.length > config.bulkMaxItems) {
+      return reply.code(400).send({ error: `Máximo ${config.bulkMaxItems} productos por petición` });
+    }
+    const ip = clientIp(req);
+
+    // 1) Validar, resolver duplicados y aplicar topes diarios (sin escribir nada todavía).
+    const results = new Array(body.items.length);
+    const firstById = new Map(); // id -> índice del primer item
+    const todo = []; // items válidos a procesar: { i, item, queue }
+    const dups = []; // [i, índice del primero]
+    let reqRoom = Math.max(0, config.trackPerDay - trackReqs.get(ip));
+    let newRoom = config.trackNewPerDay > 0 ? Math.max(0, config.trackNewPerDay - trackNew.get(ip)) : Infinity;
+    let overLimit = 0;
+    body.items.forEach((raw, i) => {
+      const { error, item } = prepareTrack(raw);
+      if (error) {
+        results[i] = { status: 'invalid', error };
+        return;
+      }
+      if (firstById.has(item.id)) {
+        dups.push([i, firstById.get(item.id)]);
+        return;
+      }
+      firstById.set(item.id, i);
+      const existing = getProduct(db, item.id);
+      if (reqRoom <= 0 || (!existing && newRoom <= 0)) {
+        overLimit++;
+        results[i] = { id: item.id, status: 'invalid', error: 'Límite diario superado' };
+        return;
+      }
+      reqRoom--;
+      if (!existing) newRoom--;
+      todo.push({ i, item, queue: !existing || isRecheckGone(existing) });
+    });
+    if (!todo.length && overLimit) {
+      return reply.code(429).send({ error: 'Has superado el límite diario de peticiones o de productos nuevos' });
+    }
+
+    // 2) Cola de consultas a ECI: todo o nada.
+    const toQueue = todo.filter((t) => t.queue).length;
+    if (pendingCheckCount() + toQueue > config.scrapeQueueMax) {
+      return reply.code(429).send({ error: 'La cola de comprobación está llena, inténtalo en unos minutos' });
+    }
+
+    // 3) Aplicar.
+    let queued = 0;
+    for (const t of todo) {
+      trackReqs.inc(ip);
+      const { product, created, queue } = trackOne(t.item);
+      if (created) trackNew.inc(ip);
+      if (queue) {
+        checkSoon(db, product, { scrape });
+        queued++;
+      }
+      results[t.i] = { id: product.id, status: created ? 'added' : 'existing' };
+    }
+    for (const [i, first] of dups) results[i] = { ...results[first] };
+
+    const count = (s) => results.filter((r) => r.status === s).length;
+    return { added: count('added'), existing: count('existing'), invalid: count('invalid'), queued, results };
   });
 
   // Qué productos de una lista de ids ya están en el tracker (lo usa la extensión
