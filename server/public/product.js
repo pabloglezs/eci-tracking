@@ -1,4 +1,5 @@
-import { $, esc, eur, fmtDay, api } from './common.js';
+import { $, esc, eur, fmtDay, api, initInstall } from './common.js';
+initInstall();
 
 const id = decodeURIComponent(location.pathname.split('/').pop());
 const root = $('#root');

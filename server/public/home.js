@@ -1,4 +1,5 @@
-import { $, esc, eur, api, sparkline } from './common.js';
+import { $, esc, eur, api, sparkline, initInstall } from './common.js';
+initInstall();
 
 const PAGE_SIZE = 24;
 const SORTS = ['drop', 'recent', 'price_asc', 'price_desc', 'near_min'];

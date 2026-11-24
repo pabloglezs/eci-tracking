@@ -1,3 +1,9 @@
+# Etapa 1: empaqueta la extensión (Chrome y Firefox) para ofrecerla como descarga desde la web.
+FROM node:24-alpine AS ext
+WORKDIR /ext
+COPY extension/ ./extension/
+RUN node extension/tools/pack.mjs
+
 FROM node:24-alpine
 
 WORKDIR /app
@@ -9,6 +15,7 @@ COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY server/ ./
+COPY --from=ext /ext/extension/dist/*.zip ./public/downloads/
 
 # La base de datos SQLite vive en /data (volumen).
 RUN mkdir -p /data/backups && chown -R node:node /data

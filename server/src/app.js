@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -384,6 +385,9 @@ export async function buildApp({ db, logger = false, serveStatic = true, scrape 
   if (serveStatic) {
     await app.register(fstatic, { root: PUBLIC_DIR });
     await app.register(fstatic, { root: CHART_DIR, prefix: '/vendor/chartjs/', decorateReply: false });
+    // Zips de la extensión (los genera extension/tools/pack.mjs; el Dockerfile los copia a public/downloads).
+    const dl = [join(PUBLIC_DIR, 'downloads'), join(here, '..', '..', 'extension', 'dist')].find((d) => existsSync(d));
+    if (dl) await app.register(fstatic, { root: dl, prefix: '/downloads/', decorateReply: false });
     app.get('/p/:id', (req, reply) => reply.sendFile('product.html'));
   }
 

@@ -147,3 +147,23 @@ button:disabled { opacity: .6; cursor: progress; }
 .deals-block h2 { margin: 0 0 2px; }
 .deals-sub { margin: 0 0 12px; font-size: 14px; }
 .toolbar h2 { margin: 0; font-size: 22px; }
+
+/* botón y modal de instalación de la extensión */
+.install-btn { white-space: nowrap; }
+header.top input[type='search'] + .install-btn { margin-left: 0; }
+header.top .brand + .install-btn { margin-left: auto; }
+.install-dlg { max-width: 520px; width: calc(100% - 32px); border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); padding: 18px 20px; }
+.install-dlg::backdrop { background: rgb(0 0 0 / .5); }
+.install-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 4px; }
+.install-head h2 { margin: 0; font-size: 20px; }
+.install-x { border: 0; background: none; padding: 4px 8px; font-size: 16px; }
+.install-tabs { display: flex; gap: 6px; margin: 12px 0; flex-wrap: wrap; }
+.install-tabs [aria-selected='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.install-dlg ol { padding-left: 20px; margin: 8px 0; }
+.install-dlg li { margin: 6px 0; }
+.install-dlg code { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; font-size: 13px; user-select: all; }
+.install-dlg a.dl { display: inline-block; background: var(--accent); color: var(--on-accent); padding: 8px 14px; border-radius: 8px; font-weight: 600; }
+.install-dlg a.dl:hover { text-decoration: none; opacity: .9; }
+.install-dlg hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
+.install-url { display: flex; gap: 8px; }
+.install-url input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }

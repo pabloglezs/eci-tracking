@@ -59,6 +59,8 @@ node scripts/bench-listing.js ./demo.db
 
 ### Extensión
 
+La propia web ofrece el botón **«🧩 Instalar extensión»** (cabecera): abre un modal con las instrucciones para Chrome/Edge/Brave y Firefox y descarga los `.zip`, que el `Dockerfile` genera con `extension/tools/pack.mjs` y sirve en `/downloads/`. El modal muestra también la URL del servidor para pegarla en las opciones. A mano:
+
 **Chrome / Brave / Edge**: `chrome://extensions` → **Modo desarrollador** → **Cargar descomprimida** → carpeta `extension/`.
 
 **Firefox**: `node extension/tools/pack.mjs` genera `extension/dist/eci-tracker-firefox.zip` (y el de Chrome); en `about:debugging` → *Este Firefox* → *Cargar complemento temporal*.

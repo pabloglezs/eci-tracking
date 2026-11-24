@@ -2,5 +2,5 @@
 **/data
 .git
 .env
-extension
+extension/dist
 *.md
