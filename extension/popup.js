@@ -83,7 +83,19 @@ function showProduct(product, note) {
   } catch {
     return notProduct('Recarga la página de El Corte Inglés y vuelve a abrir esto.');
   }
-  if (!product) return notProduct('Esta página no parece la ficha de un producto.');
+  if (!product) {
+    let n = 0;
+    try {
+      n = await ext.tabs.sendMessage(tab.id, { type: 'getBulkCount' });
+    } catch {
+      // sin respuesta: no se muestra el aviso
+    }
+    return notProduct(
+      n > 0
+        ? `Esta página tiene ${n} productos sin seguir: usa el botón flotante «Seguir todos» para añadirlos.`
+        : 'Esta página no parece la ficha de un producto.',
+    );
+  }
   view.innerHTML = '<p class="muted">Consultando…</p>';
   const id = new URL(product.url).pathname.match(ID_RE)?.[1];
   let info = null;

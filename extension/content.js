@@ -8,6 +8,7 @@
   // Restos de una instancia anterior (p. ej. extensión recargada con la pestaña abierta):
   // se quitan para no duplicar botones.
   document.getElementById(HOST_ID)?.remove();
+  document.getElementById('eci-tracker-bulk')?.remove();
   document.querySelectorAll('[data-eci-mini]').forEach((n) => n.remove());
   document.querySelectorAll('[data-eci-card]').forEach((n) => delete n.dataset.eciCard);
 
@@ -21,6 +22,7 @@
     observer?.disconnect();
     timers.forEach(clearInterval);
     document.getElementById(HOST_ID)?.remove();
+  document.getElementById('eci-tracker-bulk')?.remove();
     document.querySelectorAll('[data-eci-mini]').forEach((n) => n.remove());
   document.querySelectorAll('[data-eci-card]').forEach((n) => delete n.dataset.eciCard);
   }
@@ -188,7 +190,10 @@
 
   // ECI navega a veces sin recargar la página: revisamos si cambió la URL.
   function tick() {
-    if (dead || document.hidden) return;
+    if (dead) return;
+    // Navegación SPA a otra página: se cancela/limpia el alta masiva.
+    if (bulk.mode !== 'idle' && bulk.url && bulk.url !== pageKey()) cancelBulk(true);
+    if (document.hidden) return;
     const key = location.origin + location.pathname;
     if (key === currentUrl && host?.isConnected) return;
     const product = readProduct();
@@ -226,6 +231,7 @@
   const minis = new Map(); // host -> { id, btn, payload, state }
   const tracked = new Set(); // ids que el tracker ya sigue
   const queried = new Set(); // ids ya consultados al servidor
+  const answered = new Set(); // ids cuya respuesta de /api/tracked ya llegó
   let webBase = null;
 
   // Enlaces que no son tarjetas de producto (menús, migas, cabecera, pie).
@@ -390,9 +396,204 @@
     minis.set(host, entry);
   }
 
+  // ---------------------------------------------------------------------------
+  // «Seguir todos»: alta de los productos visibles de la página con un solo clic.
+  // Coexistencia con el botón de la ficha: en fichas de producto (botón flotante de la ficha
+  // montado) este widget no se muestra, aunque haya carruseles de recomendados.
+  // Se ejecuta aquí (no en el service worker, que MV3 puede dormir), en secuencia y con pausa.
+  // ---------------------------------------------------------------------------
+  const BULK_MAX = 60; // tope por clic
+  const BULK_PAUSE_MS = 2200; // el servidor limita POST /api/products (30/min)
+  const BULK_HOST_ID = 'eci-tracker-bulk';
+  const BULK_STYLE = `
+    :host { all: initial; }
+    .box { position: fixed; right: 20px; bottom: 20px; z-index: 2147483647; font: 14px/1.4 system-ui, sans-serif; }
+    .panel { background: #fff; color: #1a1a1a; border-radius: 14px; padding: 12px 14px; max-width: 290px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+    button { font: inherit; font-weight: 600; cursor: pointer; border-radius: 999px; padding: 10px 16px;
+      border: 1px solid #2563eb; background: #2563eb; color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+    button.secondary { background: #fff; color: #2563eb; box-shadow: none; }
+    button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+    .main { display: block; }
+    .note { font-size: 12px; color: #555; margin: 0; }
+    .row { display: flex; gap: 8px; }
+    .row button { flex: 1; }
+    .warn { color: #b3261e; font-weight: 600; margin: 0; }
+    p { margin: 0; }
+  `;
+  const bulk = { mode: 'idle', key: '', run: null, url: '', list: [] };
+  let bulkHost;
+  let bulkShadow;
+  const pageKey = () => location.origin + location.pathname + location.search;
+  const sleep = (ms, run) =>
+    new Promise((resolve) => {
+      const t = setTimeout(() => resolve(false), ms);
+      run.wake = () => { clearTimeout(t); resolve(true); };
+    });
+
+  function bulkCandidates() {
+    const seen = new Set();
+    const out = [];
+    for (const e of minis.values()) {
+      // Sólo ids ya consultados al servidor (si no, se contarían los ya seguidos).
+      if (!e.btn.isConnected || e.state === 'busy' || !answered.has(e.id) || tracked.has(e.id) || seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push({ id: e.id, payload: { ...e.payload } });
+    }
+    return out;
+  }
+
+  function removeBulk() {
+    bulkHost?.remove();
+    bulkHost = null;
+    bulk.key = '';
+  }
+
+  function renderBulk(html, acts = {}, focus = false) {
+    if (!bulkHost?.isConnected) {
+      bulkHost = document.createElement('div');
+      bulkHost.id = BULK_HOST_ID;
+      bulkShadow = bulkHost.attachShadow({ mode: 'closed' });
+      document.documentElement.appendChild(bulkHost);
+    }
+    bulkShadow.innerHTML = `<style>${BULK_STYLE}</style><div class="box"><div class="panel" role="region" aria-label="ECI Tracker">${html}</div></div>`;
+    for (const [act, fn] of Object.entries(acts)) bulkShadow.querySelector(`[data-act="${act}"]`)?.addEventListener('click', fn);
+    if (focus) bulkShadow.querySelector('button')?.focus?.({ preventScroll: true });
+  }
+
+  function updateBulk() {
+    if (dead || bulk.mode !== 'idle') return;
+    const list = bulkCandidates();
+    if (list.length < 2 || host?.isConnected) return removeBulk();
+    const n = list.length;
+    if (bulkHost?.isConnected && bulk.key === String(n)) return;
+    bulk.key = String(n);
+    const label = n > BULK_MAX ? `Seguir los primeros ${BULK_MAX} de ${n}` : `Seguir todos (${n})`;
+    const note =
+      n > BULK_MAX ? '<p class="note">Puedes repetir el clic o desplazarte para cargar más productos.</p>' : '';
+    renderBulk(`<button class="main" data-act="start">📉 ${label}</button>${note}`, {
+      start: () => confirmBulk(list.slice(0, BULK_MAX), n),
+    });
+  }
+
+  function confirmBulk(list, total) {
+    bulk.mode = 'confirm';
+    bulk.url = pageKey();
+    bulk.list = list;
+    const extra = total > list.length ? ` (de ${total} sin seguir)` : '';
+    renderBulk(
+      `<p>¿Seguir ${list.length} productos${extra}? Se consultará su precio cada día.</p>
+       <div class="row"><button data-act="ok">Confirmar</button><button class="secondary" data-act="no">Cancelar</button></div>`,
+      { ok: () => runBulk(list), no: () => resetBulk() },
+      true,
+    );
+  }
+
+  function resetBulk() {
+    bulk.mode = 'idle';
+    bulk.run = null;
+    bulk.list = [];
+    removeBulk();
+    updateBulk();
+  }
+
+  // Cancela el alta masiva (el usuario o una navegación a otra página).
+  function cancelBulk(silent) {
+    if (bulk.mode === 'running' && bulk.run) {
+      bulk.run.cancel = true;
+      bulk.run.silent = silent;
+      bulk.run.wake?.();
+    } else if (bulk.mode !== 'idle') {
+      resetBulk();
+    }
+  }
+
+  const paintId = (id, state, msg) => {
+    for (const e of minis.values()) if (e.id === id && e.btn.isConnected) paintMini(e, state, msg);
+  };
+  const retryable = (r) => !r?.ok && (r?.network || r?.status >= 500 || !r?.status);
+
+  async function runBulk(list) {
+    if (bulk.mode === 'running') return; // no se lanza dos veces a la vez
+    const run = { cancel: false, silent: false, wake: null };
+    bulk.mode = 'running';
+    bulk.run = run;
+    bulk.url = pageKey();
+    const s = { done: 0, already: 0, failed: 0 };
+    let consecutive = 0;
+    let stop = null;
+    const progress = (i) => {
+      renderBulk(
+        `<p role="status" aria-live="polite">Siguiendo ${i}/${list.length}…</p>
+         <button class="secondary" data-act="cancel">Cancelar</button>`,
+        { cancel: () => cancelBulk(false) },
+        true,
+      );
+    };
+    for (let i = 0; i < list.length; i++) {
+      if (run.cancel || dead) break;
+      const it = list[i];
+      if (tracked.has(it.id)) {
+        s.already++;
+        continue;
+      }
+      progress(i + 1);
+      paintId(it.id, 'busy');
+      let res = await send({ type: 'track', payload: it.payload });
+      if (!run.cancel && !dead && retryable(res)) {
+        if (await sleep(BULK_PAUSE_MS, run)) break; // 1 reintento tras la pausa
+        res = await send({ type: 'track', payload: it.payload });
+      }
+      if (run.cancel || dead) {
+        paintId(it.id, tracked.has(it.id) ? 'ok' : 'idle');
+        break;
+      }
+      if (res?.ok) {
+        consecutive = 0;
+        tracked.add(it.id);
+        webBase = res.base || webBase;
+        if (res.created) s.done++;
+        else s.already++;
+        paintId(it.id, 'ok');
+      } else if (res?.status === 429) {
+        paintId(it.id, 'idle');
+        stop = 'limit';
+        break;
+      } else if (res?.status >= 400 && res.status < 500) {
+        // Producto concreto rechazado (p. ej. URL no válida): se omite y se cuenta.
+        consecutive = 0;
+        s.failed++;
+        paintId(it.id, 'err', res.error);
+      } else {
+        s.failed++;
+        paintId(it.id, 'err', res?.error);
+        if (++consecutive >= 3) {
+          stop = 'server';
+          break;
+        }
+      }
+      if (i < list.length - 1 && (await sleep(BULK_PAUSE_MS, run))) break;
+    }
+    if (run.silent || dead) return resetBulk();
+    const why = { limit: 'Límite del servidor alcanzado: reintenta más tarde.', server: 'El servidor no responde: se detuvo tras 3 fallos seguidos.' }[stop] ?? (run.cancel ? 'Cancelado.' : '');
+    bulk.mode = 'summary';
+    renderBulk(
+      `${why ? `<p class="${stop ? 'warn' : ''}" role="status" aria-live="polite">${why}</p>` : ''}
+       <p${why ? '' : ' role="status" aria-live="polite"'}>Hechos ${s.done} · ya seguidos ${s.already} · fallidos ${s.failed}</p>
+       <button class="secondary" data-act="close">Cerrar</button>`,
+      { close: () => resetBulk() },
+      true,
+    );
+  }
+
   let statusBlockedUntil = 0;
 
   async function scan() {
+    await scanCards();
+    updateBulk();
+  }
+
+  async function scanCards() {
     if (dead || document.hidden) return;
     for (const card of findCards()) addMini(card);
     for (const host of minis.keys()) if (!host.isConnected) minis.delete(host);
@@ -414,6 +615,7 @@
       return;
     }
     webBase = res.base || webBase;
+    fresh.forEach((id) => answered.add(id));
     for (const id of res.tracked) tracked.add(id);
     for (const e of minis.values()) if (tracked.has(e.id) && e.state === 'idle') paintMini(e, 'ok');
   }
@@ -429,7 +631,9 @@
 
   // El popup de la extensión pide los datos del producto de la pestaña activa.
   ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (!dead && msg?.type === 'getProduct') sendResponse(readProduct());
+    if (dead) return;
+    if (msg?.type === 'getProduct') sendResponse(readProduct());
+    if (msg?.type === 'getBulkCount') sendResponse(host?.isConnected ? 0 : bulkCandidates().length);
   });
 
   tick();

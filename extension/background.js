@@ -28,11 +28,12 @@ async function track(payload) {
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: data.error || `Error ${res.status}` };
+    // `status` (HTTP) y `network` permiten al alta masiva distinguir 429, 400, 5xx y red caída.
+    if (!res.ok) return { ok: false, status: res.status, error: data.error || `Error ${res.status}` };
     return { ok: true, created: data.created, base: api, webUrl: `${api}/p/${encodeURIComponent(data.product.id)}` };
   } catch (e) {
-    if (e?.name === 'AbortError') return { ok: false, error: `${api} tarda demasiado en responder. Inténtalo de nuevo.` };
-    return { ok: false, error: `No se pudo conectar con ${api}. Revisa la URL en las opciones de la extensión.` };
+    if (e?.name === 'AbortError') return { ok: false, network: true, error: `${api} tarda demasiado en responder. Inténtalo de nuevo.` };
+    return { ok: false, network: true, error: `No se pudo conectar con ${api}. Revisa la URL en las opciones de la extensión.` };
   }
 }
 
