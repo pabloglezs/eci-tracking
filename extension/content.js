@@ -192,7 +192,7 @@
   function tick() {
     if (dead) return;
     // Navegación SPA a otra página: se cancela/limpia el alta masiva.
-    if (bulk.mode !== 'idle' && bulk.url && bulk.url !== pageKey()) cancelBulk(true);
+    if (bulk.mode !== 'idle' && bulk.url && bulk.url !== pageKey()) cancelBulk();
     if (document.hidden) return;
     const key = location.origin + location.pathname;
     if (key === currentUrl && host?.isConnected) return;
@@ -400,10 +400,10 @@
   // «Seguir todos»: alta de los productos visibles de la página con un solo clic.
   // Coexistencia con el botón de la ficha: en fichas de producto (botón flotante de la ficha
   // montado) este widget no se muestra, aunque haya carruseles de recomendados.
-  // Se ejecuta aquí (no en el service worker, que MV3 puede dormir), en secuencia y con pausa.
+  // Se envía UNA sola petición con todo el lote (el servidor da de alta y consulta a su ritmo),
+  // así que el usuario puede cerrar la página en cuanto se envía.
   // ---------------------------------------------------------------------------
-  const BULK_MAX = 60; // tope por clic
-  const BULK_PAUSE_MS = 2200; // el servidor limita POST /api/products (30/min)
+  const BULK_MAX = 100; // tope por clic (una sola petición POST /api/products/bulk)
   const BULK_HOST_ID = 'eci-tracker-bulk';
   const BULK_STYLE = `
     :host { all: initial; }
@@ -421,16 +421,10 @@
     .warn { color: #b3261e; font-weight: 600; margin: 0; }
     p { margin: 0; }
   `;
-  const bulk = { mode: 'idle', key: '', run: null, url: '', list: [] };
+  const bulk = { mode: 'idle', key: '', url: '', list: [] };
   let bulkHost;
   let bulkShadow;
   const pageKey = () => location.origin + location.pathname + location.search;
-  const sleep = (ms, run) =>
-    new Promise((resolve) => {
-      const t = setTimeout(() => resolve(false), ms);
-      run.wake = () => { clearTimeout(t); resolve(true); };
-    });
-
   function bulkCandidates() {
     const seen = new Set();
     const out = [];
@@ -484,102 +478,83 @@
     renderBulk(
       `<p>¿Seguir ${list.length} productos${extra}? Se consultará su precio cada día.</p>
        <div class="row"><button data-act="ok">Confirmar</button><button class="secondary" data-act="no">Cancelar</button></div>`,
-      { ok: () => runBulk(list), no: () => resetBulk() },
+      { ok: () => sendBulk(list), no: () => resetBulk() },
       true,
     );
   }
 
   function resetBulk() {
     bulk.mode = 'idle';
-    bulk.run = null;
     bulk.list = [];
     removeBulk();
     updateBulk();
   }
 
-  // Cancela el alta masiva (el usuario o una navegación a otra página).
-  function cancelBulk(silent) {
-    if (bulk.mode === 'running' && bulk.run) {
-      bulk.run.cancel = true;
-      bulk.run.silent = silent;
-      bulk.run.wake?.();
-    } else if (bulk.mode !== 'idle') {
-      resetBulk();
-    }
+  // Navegación a otra página: se limpia el widget (un envío en curso termina por su cuenta).
+  function cancelBulk() {
+    if (bulk.mode !== 'idle' && bulk.mode !== 'sending') resetBulk();
   }
 
   const paintId = (id, state, msg) => {
     for (const e of minis.values()) if (e.id === id && e.btn.isConnected) paintMini(e, state, msg);
   };
-  const retryable = (r) => !r?.ok && (r?.network || r?.status >= 500 || !r?.status);
 
-  async function runBulk(list) {
-    if (bulk.mode === 'running') return; // no se lanza dos veces a la vez
-    const run = { cancel: false, silent: false, wake: null };
-    bulk.mode = 'running';
-    bulk.run = run;
-    bulk.url = pageKey();
-    const s = { done: 0, already: 0, failed: 0 };
-    let consecutive = 0;
-    let stop = null;
-    const progress = (i) => {
+  // Item del lote: sólo los campos del contrato de POST /api/products (nulos/undefined se omiten).
+  const bulkItem = ({ url, name, image, price }) => {
+    const item = { url, name };
+    if (image) item.image = image;
+    if (price != null) item.price = price;
+    return item;
+  };
+
+  // Una sola petición con todo el lote: el servidor da de alta y consulta los precios a su ritmo.
+  async function sendBulk(list) {
+    if (bulk.mode === 'sending') return; // sin dobles envíos
+    bulk.mode = 'sending';
+    const key = pageKey();
+    bulk.url = key;
+    renderBulk(`<p role="status" aria-live="polite">Enviando ${list.length} productos…</p>`);
+    for (const it of list) paintId(it.id, 'busy');
+    const res = await send({ type: 'trackBulk', items: list.map((it) => bulkItem(it.payload)) });
+    if (dead) return;
+    if (!res?.ok) {
+      for (const it of list) paintId(it.id, tracked.has(it.id) ? 'ok' : 'idle');
+      if (pageKey() !== key) return resetBulk();
+      const msg =
+        res?.status === 404
+          ? 'Tu servidor aún no admite el alta masiva: actualízalo.'
+          : res?.error || 'No se pudo conectar con el servidor.';
+      bulk.mode = 'summary';
       renderBulk(
-        `<p role="status" aria-live="polite">Siguiendo ${i}/${list.length}…</p>
-         <button class="secondary" data-act="cancel">Cancelar</button>`,
-        { cancel: () => cancelBulk(false) },
+        `<p class="warn" role="status" aria-live="polite">${escapeHtml(msg)}</p>
+         <div class="row">${res?.status ? '' : '<button data-act="retry">Reintentar</button>'}<button class="secondary" data-act="close">Cerrar</button></div>`,
+        { retry: () => { bulk.mode = 'idle'; sendBulk(list); }, close: () => resetBulk() },
         true,
       );
-    };
-    for (let i = 0; i < list.length; i++) {
-      if (run.cancel || dead) break;
-      const it = list[i];
-      if (tracked.has(it.id)) {
-        s.already++;
-        continue;
-      }
-      progress(i + 1);
-      paintId(it.id, 'busy');
-      let res = await send({ type: 'track', payload: it.payload });
-      if (!run.cancel && !dead && retryable(res)) {
-        if (await sleep(BULK_PAUSE_MS, run)) break; // 1 reintento tras la pausa
-        res = await send({ type: 'track', payload: it.payload });
-      }
-      if (run.cancel || dead) {
-        paintId(it.id, tracked.has(it.id) ? 'ok' : 'idle');
-        break;
-      }
-      if (res?.ok) {
-        consecutive = 0;
-        tracked.add(it.id);
-        webBase = res.base || webBase;
-        if (res.created) s.done++;
-        else s.already++;
-        paintId(it.id, 'ok');
-      } else if (res?.status === 429) {
-        paintId(it.id, 'idle');
-        stop = 'limit';
-        break;
-      } else if (res?.status >= 400 && res.status < 500) {
-        // Producto concreto rechazado (p. ej. URL no válida): se omite y se cuenta.
-        consecutive = 0;
-        s.failed++;
-        paintId(it.id, 'err', res.error);
-      } else {
-        s.failed++;
-        paintId(it.id, 'err', res?.error);
-        if (++consecutive >= 3) {
-          stop = 'server';
-          break;
-        }
-      }
-      if (i < list.length - 1 && (await sleep(BULK_PAUSE_MS, run))) break;
+      return;
     }
-    if (run.silent || dead) return resetBulk();
-    const why = { limit: 'Límite del servidor alcanzado: reintenta más tarde.', server: 'El servidor no responde: se detuvo tras 3 fallos seguidos.' }[stop] ?? (run.cancel ? 'Cancelado.' : '');
+    const d = res.data ?? {};
+    const results = Array.isArray(d.results) ? d.results : [];
+    list.forEach((it, i) => {
+      const st = results[i]?.status;
+      if (st === 'added' || st === 'existing') {
+        tracked.add(it.id);
+        paintId(it.id, 'ok');
+      } else if (st === 'invalid') {
+        paintId(it.id, 'err', results[i]?.error || 'Producto no válido');
+      } else {
+        paintId(it.id, 'idle');
+      }
+    });
+    webBase = res.base || webBase;
+    if (pageKey() !== key) return resetBulk();
+    const count = (s) => results.filter((r) => r?.status === s).length;
+    const added = d.added ?? count('added');
+    const existing = d.existing ?? count('existing');
+    const invalid = d.invalid ?? count('invalid');
     bulk.mode = 'summary';
     renderBulk(
-      `${why ? `<p class="${stop ? 'warn' : ''}" role="status" aria-live="polite">${why}</p>` : ''}
-       <p${why ? '' : ' role="status" aria-live="polite"'}>Hechos ${s.done} · ya seguidos ${s.already} · fallidos ${s.failed}</p>
+      `<p role="status" aria-live="polite">Enviados ${list.length}: ${added} nuevos, ${existing} ya seguidos, ${invalid} no válidos. El servidor consultará sus precios en unos minutos; puedes cerrar la página.</p>
        <button class="secondary" data-act="close">Cerrar</button>`,
       { close: () => resetBulk() },
       true,
