@@ -60,7 +60,7 @@ node scripts/bench-listing.js ./demo.db
 **Firefox**: `node extension/tools/pack.mjs` genera `extension/dist/eci-tracker-firefox.zip` (y el de Chrome); en `about:debugging` → *Este Firefox* → *Cargar complemento temporal*.
 
 1. En la pantalla de opciones que se abre, pon la URL de tu servidor (`http://localhost:3000` o la pública).
-2. En una ficha de producto de elcorteingles.es aparece el botón «Seguir precio» abajo a la derecha (si ya se sigue, muestra su precio y el mínimo). El icono de la extensión abre un popup con lo mismo.
+2. En una ficha de producto de elcorteingles.es aparece el botón «Seguir precio» abajo a la derecha (si ya se sigue, muestra su precio y el mínimo). El icono de la extensión abre un popup con lo mismo. En los listados (búsqueda, favoritos, categorías) aparece **«Seguir todos (N)»**: envía de una vez los productos de la página al servidor (máx. 100), que los va leyendo en segundo plano, así que puedes cerrar la página.
 3. En listados, búsquedas y favoritos aparece un mini botón 📉 arriba a la izquierda de cada tarjeta; los productos que ya están en el tracker salen con ✓ (clic = abrir su historial).
 
 Los iconos se regeneran con `node extension/tools/icons.mjs`.
@@ -114,6 +114,8 @@ Cada noche (`BACKUP_CRON`) se hace una copia consistente de la base con `VACUUM 
 | `BACKUP_PATH` | volumen `eci-backups` | Ruta del host para los backups (bind mount) |
 | `TRACK_PER_MINUTE` / `TRACK_PER_DAY` | `30` / `200` | Límites por IP de `POST /api/products` |
 | `TRACK_NEW_PER_DAY` | `0` | Productos nuevos por IP y día (`0` = sin límite; ponlo si abres el servicio a más gente) |
+| `BULK_MAX_ITEMS` / `BULK_PER_MINUTE` | `100` / `5` | Alta masiva: máximo de productos por petición y peticiones por minuto y IP. Cada producto cuenta para `TRACK_PER_DAY` y `TRACK_NEW_PER_DAY` |
+| `SCRAPE_QUEUE_MAX` | `300` | Tope de productos nuevos pendientes de primera lectura; con la cola llena el alta masiva responde 429 |
 | `SUBSCRIBE_PER_MINUTE` | `10` | Límite por IP de las suscripciones |
 
 ## API
@@ -123,6 +125,7 @@ Cada noche (`BACKUP_CRON`) se hace una copia consistente de la base con `VACUUM 
 | `GET` | `/api/products?q=&deals=1&cat=&sub=&sort=&page=&limit=` | Listado paginado → `{products, total, page, limit, pages, categories}`. `sort`: `drop` · `recent` · `price_asc` · `price_desc` · `near_min`. `limit` ≤ 100. `cat=Sin categoría` filtra los que no la tienen |
 | `GET` | `/api/products/:id` | Ficha: estadísticas, histórico, `status`, `inStock`, `originalPrice`, `categoryPath` |
 | `POST` | `/api/products` | `{url, name?, image?, price?}` — añade un producto (cualquier otro campo da 400) |
+| `POST` | `/api/products/bulk` | `{items:[{url, name?, image?, price?}]}` (1–100) — alta masiva; responde `{added, existing, invalid, queued, results}`. Los precios se leen en segundo plano, a ritmo educado |
 | `GET` | `/api/tracked?ids=A1,MP_2_X` | Cuáles de esos ids ya están en el tracker (máx. 100) |
 | `POST` | `/api/products/:id/subscribe` | `{email, targetPrice?}` — pide la alerta; envía el email de confirmación |
 | `GET`/`POST` | `/api/confirm?token=` | GET muestra la página con el botón; POST confirma |
