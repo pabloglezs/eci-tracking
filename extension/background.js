@@ -28,11 +28,30 @@ async function track(payload) {
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: data.error || `Error ${res.status}` };
+    // `status` (HTTP) y `network` permiten al alta masiva distinguir 429, 400, 5xx y red caída.
+    if (!res.ok) return { ok: false, status: res.status, error: data.error || `Error ${res.status}` };
     return { ok: true, created: data.created, base: api, webUrl: `${api}/p/${encodeURIComponent(data.product.id)}` };
   } catch (e) {
-    if (e?.name === 'AbortError') return { ok: false, error: `${api} tarda demasiado en responder. Inténtalo de nuevo.` };
-    return { ok: false, error: `No se pudo conectar con ${api}. Revisa la URL en las opciones de la extensión.` };
+    if (e?.name === 'AbortError') return { ok: false, network: true, error: `${api} tarda demasiado en responder. Inténtalo de nuevo.` };
+    return { ok: false, network: true, error: `No se pudo conectar con ${api}. Revisa la URL en las opciones de la extensión.` };
+  }
+}
+
+// Alta masiva: una sola petición con hasta 100 items (el servidor las procesa a su ritmo).
+async function trackBulk(items) {
+  const api = await getApi();
+  try {
+    const res = await fetchT(
+      `${api}/api/products/bulk`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items }) },
+      20000,
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, status: res.status, error: data.error || `Error ${res.status}` };
+    return { ok: true, data, base: api };
+  } catch (e) {
+    if (e?.name === 'AbortError') return { ok: false, network: true, error: `${api} tarda demasiado en responder.` };
+    return { ok: false, network: true, error: `No se pudo conectar con ${api}. Revisa la URL en las opciones de la extensión.` };
   }
 }
 
@@ -73,7 +92,7 @@ async function info(id) {
 }
 
 ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  const handler = { track: () => track(msg.payload), status: () => status(msg.ids), info: () => info(msg.id) }[msg?.type];
+  const handler = { track: () => track(msg.payload), trackBulk: () => trackBulk(msg.items),status: () => status(msg.ids), info: () => info(msg.id) }[msg?.type];
   if (!handler) return;
   handler().then(sendResponse);
   return true; // respuesta asíncrona
