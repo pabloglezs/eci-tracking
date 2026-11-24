@@ -40,7 +40,8 @@ a:hover { text-decoration: underline; }
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
 header.top { background: var(--surface); border-bottom: 1px solid var(--border); }
 header.top .wrap { display: flex; align-items: center; gap: 16px; padding-top: 12px; padding-bottom: 12px; flex-wrap: wrap; }
-.brand { font-weight: 700; font-size: 18px; color: var(--text); }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); }
+.brand img { height: 22px; width: auto; display: block; }
 .brand:hover { text-decoration: none; }
 .brand span { color: var(--accent); }
 input[type='search'], input[type='email'] {

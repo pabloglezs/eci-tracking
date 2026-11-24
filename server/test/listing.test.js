@@ -6,7 +6,8 @@ import { listProducts, upsertProduct, NO_CATEGORY } from '../src/store.js';
 import { computeStats, dealInfo } from '../src/products.js';
 
 const TZ = 'Europe/Madrid';
-const ago = (n) => today(TZ, new Date(Date.now() - n * 864e5));
+// Se resta a las 12:00 UTC del día de hoy: restar 24 h a la hora actual falla cerca de medianoche al cruzar un cambio de hora.
+const ago = (n) => today(TZ, new Date(new Date(`${today(TZ)}T12:00:00Z`).getTime() - n * 864e5));
 
 function seed(db, id, series, { category = null, subcategory = null, name = id, created } = {}) {
   upsertProduct(db, { id, url: `https://www.elcorteingles.es/x/${id}-pr/`, name });

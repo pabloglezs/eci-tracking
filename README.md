@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" alt="ECI Tracker" width="220"></p>
+
 # ECI Tracker
 
 Histórico de precios de **El Corte Inglés**, al estilo camelcamelcamel. Pensado para desplegarse por cuenta propia (self-hosted).
