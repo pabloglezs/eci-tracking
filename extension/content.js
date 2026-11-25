@@ -112,17 +112,17 @@
     .box { position: fixed; right: 20px; bottom: 20px; z-index: 2147483647; font: 14px/1.4 system-ui, sans-serif; }
     button, a.btn {
       display: inline-block; cursor: pointer; border: 0; border-radius: 999px; padding: 12px 18px;
-      font: inherit; font-weight: 600; color: #fff; background: #2563eb; text-decoration: none;
+      font: inherit; font-weight: 600; color: #fff; background: #007a4d; text-decoration: none;
       box-shadow: 0 4px 14px rgba(0,0,0,.25);
     }
     button:disabled { opacity: .7; cursor: wait; }
-    .ok, a.btn.ok { background: #0a7d3b; }
+    .ok, a.btn.ok { background: #005c3a; }
     .err { background: #fff; color: #b3261e; border: 1px solid #b3261e; border-radius: 12px; padding: 10px 14px;
       max-width: 280px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
     .card { background: #fff; color: #1a1a1a; border-radius: 14px; padding: 12px 14px; min-width: 220px;
       box-shadow: 0 4px 14px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
     .card .btn { text-align: center; box-shadow: none; padding: 9px 14px; }
-    .badge { color: #0a7d3b; font-weight: 600; }
+    .badge { color: #005c3a; font-weight: 600; }
     .stats { display: flex; gap: 14px; }
     .stats .k { display: block; font-size: 11px; color: #666; text-transform: uppercase; }
     .row { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
@@ -220,13 +220,13 @@
     button {
       all: unset; box-sizing: border-box; width: 32px; height: 32px; border-radius: 50%;
       display: grid; place-items: center; cursor: pointer; font: 600 15px/1 system-ui, sans-serif;
-      background: #fff; color: #2563eb; box-shadow: 0 1px 5px rgba(0,0,0,.35);
+      background: #fff; color: #007a4d; box-shadow: 0 1px 5px rgba(0,0,0,.35);
     }
-    button:hover { background: #eff4ff; }
-    button.ok { background: #0a7d3b; color: #fff; }
+    button:hover { background: #e8f5ee; }
+    button.ok { background: #005c3a; color: #fff; }
     button.err { background: #b3261e; color: #fff; }
     button:disabled { opacity: .6; cursor: wait; }
-    button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+    button:focus-visible { outline: 2px solid #007a4d; outline-offset: 2px; }
   `;
   const minis = new Map(); // host -> { id, btn, payload, state }
   const tracked = new Set(); // ids que el tracker ya sigue
@@ -411,9 +411,9 @@
     .panel { background: #fff; color: #1a1a1a; border-radius: 14px; padding: 12px 14px; max-width: 290px;
       box-shadow: 0 4px 14px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
     button { font: inherit; font-weight: 600; cursor: pointer; border-radius: 999px; padding: 10px 16px;
-      border: 1px solid #2563eb; background: #2563eb; color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
-    button.secondary { background: #fff; color: #2563eb; box-shadow: none; }
-    button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+      border: 1px solid #007a4d; background: #007a4d; color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+    button.secondary { background: #fff; color: #007a4d; box-shadow: none; }
+    button:focus-visible { outline: 3px solid #005c3a; outline-offset: 2px; }
     .main { display: block; }
     .note { font-size: 12px; color: #555; margin: 0; }
     .row { display: flex; gap: 8px; }

@@ -1,13 +1,13 @@
 :root {
-  --bg: #f6f7f9;
+  --bg: #f4f8f6;
   --surface: #fff;
-  --text: #17181c;
-  --muted: #6b7280;
-  --border: #e3e5ea;
-  --accent: #2563eb;
-  --good: #0a7d3b;
+  --text: #14201a;
+  --muted: #5f6f67;
+  --border: #d9e6df;
+  --accent: #007a4d;
+  --good: #005c3a;
   --bad: #c0392b;
-  --chip: #e8f6ee;
+  --chip: #e3f3ea;
   /* Texto sobre fondos de acento / verde (contraste ≥ 4.5:1 en ambos temas). */
   --on-accent: #fff;
   --on-good: #fff;
@@ -15,16 +15,16 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #101216;
-    --surface: #181b21;
-    --text: #eceef2;
-    --muted: #98a0ad;
-    --border: #2a2f38;
-    --accent: #6ea0ff;
-    --good: #46c27b;
+    --bg: #0e1511;
+    --surface: #151e19;
+    --text: #e9f1ec;
+    --muted: #96a89e;
+    --border: #263630;
+    --accent: #4cc790;
+    --good: #5fd69a;
     --bad: #ef7a6c;
-    --chip: #14301f;
-    --on-accent: #0b1220;
+    --chip: #15352a;
+    --on-accent: #06150e;
     --on-good: #07140c;
   }
 }
