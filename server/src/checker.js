@@ -61,7 +61,7 @@ export async function checkProduct(db, product, { scrape = fetchProduct, tz = co
 }
 
 /** Productos a consultar en la pasada diaria + cuántos se omiten. */
-export function pendingProducts(db, { tz = config.timezone, now = new Date(), goneRecheckDays = config.goneRecheckDays } = {}) {
+export function pendingProducts(db, { tz = config.timezone, now = new Date(), goneRecheckDays = config.goneRecheckDays, force = false } = {}) {
   const day = today(tz, now);
   const all = db
     .prepare(
@@ -74,6 +74,7 @@ export function pendingProducts(db, { tz = config.timezone, now = new Date(), go
       // Sondeo ocasional por si vuelve a estar disponible.
       return goneRecheckDays > 0 && (!p.last_checked_at || Date.parse(p.last_checked_at) <= recheckBefore);
     }
+    if (force) return true; // «forzar»: vuelve a leer también los que ya tienen precio de hoy (se actualiza el de hoy)
     if (p.has_today) return false;
     // Sin stock y ya comprobado hoy: no repetir (no genera precio, así que no cuenta como "hecho").
     if (p.in_stock === 0 && p.last_checked_at && today(tz, new Date(p.last_checked_at)) === day) return false;
@@ -85,13 +86,13 @@ export function pendingProducts(db, { tz = config.timezone, now = new Date(), go
 let running = false;
 
 /** Comprueba todos los productos que aún no tienen precio de hoy. */
-export async function runDailyCheck(db, { scrape, tz = config.timezone, delay = config.requestDelayMs } = {}) {
+export async function runDailyCheck(db, { scrape, tz = config.timezone, delay = config.requestDelayMs, force = false } = {}) {
   if (running) return { skipped: true };
   running = true;
   const stats = { checked: 0, failed: 0 };
   let runId;
   try {
-    const { pending, skipped } = pendingProducts(db, { tz });
+    const { pending, skipped } = pendingProducts(db, { tz, force });
     runId = Number(
       db.prepare('INSERT INTO check_runs (started_at, skipped) VALUES (?, ?)').run(new Date().toISOString(), skipped).lastInsertRowid,
     );

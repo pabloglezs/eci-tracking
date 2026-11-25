@@ -262,3 +262,17 @@ test('marketplace: tallas sin stock se ignoran; todas agotadas => inStock false;
   assert.deepEqual([none.price, none.inStock], [44.99, false]);
   assert.throws(() => parseProductHtml(mpHtml([{ '@type': 'Product', offers: {} }])), /No se encontró el precio/);
 });
+
+test('pendingProducts: los que ya tienen precio de hoy se omiten, salvo con force', async () => {
+  const { pendingProducts } = await import('../src/checker.js');
+  const { recordPrice } = await import('../src/store.js');
+  const db = openDb(':memory:');
+  upsertProduct(db, mk(1));
+  upsertProduct(db, mk(2));
+  recordPrice(db, mk(1).id, 10, TZ); // 1 ya tiene precio de hoy
+  const normal = pendingProducts(db, { tz: TZ });
+  assert.deepEqual(normal.pending.map((p) => p.id), [mk(2).id]);
+  assert.equal(normal.skipped, 1);
+  const forced = pendingProducts(db, { tz: TZ, force: true });
+  assert.equal(forced.pending.length, 2);
+});

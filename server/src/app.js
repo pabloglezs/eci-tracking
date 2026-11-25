@@ -376,8 +376,10 @@ export async function buildApp({ db, logger = false, serveStatic = true, scrape 
     if (!config.adminToken || req.headers['x-admin-token'] !== config.adminToken) {
       return reply.code(403).send({ error: 'forbidden' });
     }
-    runDailyCheck(db).catch((e) => console.error('[check]', e));
-    return { started: true };
+    // ?force=1: vuelve a comprobar todos, aunque ya tengan precio de hoy.
+    const force = ['1', 'true'].includes(String(req.query?.force));
+    runDailyCheck(db, { force }).catch((e) => console.error('[check]', e));
+    return { started: true, force };
   });
 
   registerAdminRoutes(app, db);
