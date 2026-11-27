@@ -207,6 +207,7 @@ export async function processQueue(db, { send = defaultSend, batch = 20, delayMs
         new Date().toISOString(),
         msg.id,
       );
+      console.log(`[mail] enviado a ${msg.to_email}: ${msg.subject}`);
       sent++;
     } catch (e) {
       const status = msg.attempts + 1 >= MAX_ATTEMPTS ? 'failed' : 'pending';
