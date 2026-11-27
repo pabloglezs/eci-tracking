@@ -204,6 +204,7 @@ export async function processQueue(db, { send = defaultSend, batch = 20, delayMs
       sent++;
     } catch (e) {
       const status = msg.attempts + 1 >= MAX_ATTEMPTS ? 'failed' : 'pending';
+      console.error(`[mail] fallo al enviar a ${msg.to_email} (intento ${msg.attempts + 1}/${MAX_ATTEMPTS}${status === 'failed' ? ', descartado' : ''}): ${String(e.message).slice(0, 200)}`);
       db.prepare('UPDATE email_queue SET status = ?, attempts = attempts + 1, error = ? WHERE id = ?').run(
         status,
         String(e.message).slice(0, 500),
