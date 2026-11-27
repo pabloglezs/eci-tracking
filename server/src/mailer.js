@@ -9,6 +9,9 @@ export const unsubUrl = (token) => `${config.publicUrl}/api/unsubscribe?token=${
 export const unsubAllUrl = (token) => `${config.publicUrl}/api/unsubscribe-all?token=${encodeURIComponent(token)}`;
 export const confirmUrl = (token) => `${config.publicUrl}/api/confirm?token=${encodeURIComponent(token)}`;
 
+// Marca para los emails: nombre y color corporativo (el logo se sirve desde PUBLIC_URL/logo.png).
+const BRAND = { name: 'ECI Tracker', color: '#007a4d' };
+
 function enqueue(db, { to, subject, text, html, unsub }) {
   db.prepare(
     'INSERT INTO email_queue (to_email, subject, text, html, unsub_url, created_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -22,7 +25,10 @@ function layout(inner, links) {
   const foot = links
     ? `Recibes este email porque te apuntaste a las alertas de este producto en ECI Tracker.<br>${parts.join(' · ')}`
     : 'Si no has sido tú, ignora este email: no se activará nada.';
-  return `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">${inner}
+  const head = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border-bottom:3px solid ${BRAND.color};width:100%"><tr>
+<td style="padding:0 10px 12px 0;width:36px"><img src="${esc(config.publicUrl)}/logo.png" width="36" height="36" alt="" style="display:block;border:0"></td>
+<td style="padding:0 0 12px;font-size:20px;font-weight:700;color:${BRAND.color}">${BRAND.name}</td></tr></table>`;
+  return `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">${head}${inner}
 <hr style="border:none;border-top:1px solid #ddd;margin:24px 0">
 <p style="font-size:12px;color:#777">${foot}</p></div>`;
 }
@@ -105,7 +111,7 @@ export function enqueueConfirmation(db, product, email, confirmToken, targetPric
     html: layout(
       `<h2 style="margin:0 0 8px">Confirma tu alerta</h2>
 <p>Has pedido recibir alertas de precio de <b>${esc(name)}</b>.${esc(goal)}</p>
-<p><a href="${esc(url)}" style="display:inline-block;background:#0a7d3b;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Confirmar mi email</a></p>
+<p><a href="${esc(url)}" style="display:inline-block;background:${BRAND.color};color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Confirmar mi email</a></p>
 <p style="font-size:13px;color:#555">El enlace caduca en ${config.confirmTtlDays} días.</p>`,
       null,
     ),
